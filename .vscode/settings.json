@@ -1,0 +1,34 @@
+{
+  "chat.promptFiles": true,
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "Dart-Code.dart-code",
+  "[dart]": {
+    "editor.formatOnSave": true,
+    "editor.formatOnType": true,
+    "editor.rulers": [80],
+    "editor.selectionHighlight": false,
+    "editor.suggest.snippetsPreventQuickSuggestions": false,
+    "editor.suggestSelection": "first",
+    "editor.tabCompletion": "onlySnippets",
+    "editor.wordBasedSuggestions": "off"
+  },
+  "dart.previewFlutterOutlineView": true,
+  "dart.warnWhenAddDependencyFails": true,
+  "dart.showTodos": true,
+  "dart.runPubGetOnPubspecChanges": "prompt",
+  "github.copilot.chat.codeGeneration.instructions": [
+    { "file": ".github/copilot-instructions.md" }
+  ],
+  "github.copilot.chat.testGeneration.instructions": [
+    { "file": ".github/copilot-instructions.md" },
+    { "text": "Always write Flutter unit and widget tests with Mocktail/bloc_test. Adhere to Arrange-Act-Assert. Ensure all asynchronous methods are pumped/awaited properly. Target 80%+ test coverage." }
+  ],
+  "github.copilot.chat.commitMessageGeneration.instructions": [
+    { "text": "Use conventional commit format: <type>(<scope>): <description>. Types: feat, fix, refactor, test, perf, docs, chore. Subject line under 72 characters. State WHY the change was made in Flutter or backend." }
+  ],
+  "files.associations": {
+    "*.rules": "javascript",
+    "firestore.rules": "javascript",
+    "storage.rules": "javascript"
+  }
+}

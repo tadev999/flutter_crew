@@ -1,0 +1,14 @@
+{
+  "recommendations": [
+    "dart-code.dart-code",
+    "dart-code.flutter",
+    "github.copilot",
+    "github.copilot-chat",
+    "tomas-hubelbauer.vscode-firestore",
+    "mtxr.sqltools",
+    "mtxr.sqltools-driver-pg",
+    "usernamehw.errorlens",
+    "pflannery.vscode-version-lens",
+    "streetsidesoftware.code-spell-checker"
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Flutter: Analyze",
+      "type": "shell",
+      "command": "flutter analyze",
+      "group": "build",
+      "problemMatcher": ["$dart-analyzer"]
+    },
+    {
+      "label": "Flutter: Format",
+      "type": "shell",
+      "command": "dart format .",
+      "group": "build"
+    },
+    {
+      "label": "Flutter: Run Tests",
+      "type": "shell",
+      "command": "flutter test",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Flutter: Build Runner (Generate)",
+      "type": "shell",
+      "command": "dart run build_runner build --delete-conflicting-outputs",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Flutter: Build Runner (Watch)",
+      "type": "shell",
+      "command": "dart run build_runner watch --delete-conflicting-outputs",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Flutter: Pub Get",
+      "type": "shell",
+      "command": "flutter pub get",
+      "group": "build"
+    },
+    {
+      "label": "FlutterCrew: Open Dashboard",
+      "type": "shell",
+      "command": "node .agents/runtime/crew.js dashboard --open",
+      "problemMatcher": []
+    }
+  ]
+}

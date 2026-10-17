@@ -1,0 +1,40 @@
+{
+  "name": "flutter-crew",
+  "version": "1.3.0",
+  "description": "Flutter delivery workflows, Copilot agents and portable evidence-based quality gates for Firebase and Supabase.",
+  "main": "bin/cli.js",
+  "bin": {
+    "flutter-crew": "./bin/cli.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check bin/cli.js && node -e \"const fs=require('fs');const {spawnSync}=require('child_process');fs.readdirSync('.agents/runtime',{recursive:true}).filter(f=>f.endsWith('.js')).forEach(f=>{const res=spawnSync('node',['--check','.agents/runtime/'+f],{stdio:'inherit'});if(res.status!==0)process.exit(1);})\""
+  },
+  "files": [
+    "bin",
+    ".agents",
+    ".vscode",
+    ".github",
+    ".cursorrules",
+    "AGENTS.md",
+    "GEMINI.md",
+    "CLAUDE.md"
+  ],
+  "keywords": [
+    "flutter",
+    "dart",
+    "firebase",
+    "supabase",
+    "ai-agents",
+    "vscode",
+    "antigravity",
+    "claude-code",
+    "copilot",
+    "mvvm"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "description": "Replace this example with a concrete requirement from the user's brief.",
+      "source": "docs/requirements.md: replace with the actual section or paragraph",
+      "acceptanceCriteria": [
+        "Describe an observable success behavior.",
+        "Describe relevant failure, boundary and authorization behaviors."
+      ],
+      "verification": "automated"
+    }
+  ]
+}

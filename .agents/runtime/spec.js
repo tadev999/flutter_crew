@@ -1,0 +1,51 @@
+'use strict';
+
+const text = (value) => typeof value === 'string' && value.trim().length > 0;
+
+function strings(value, label, allowEmpty = false) {
+  if (!Array.isArray(value) || (!allowEmpty && !value.length) || !value.every(text)) {
+    throw new Error(`${label} must be ${allowEmpty ? 'an' : 'a non-empty'} array of non-empty strings.`);
+  }
+}
+
+function validateSpec(value) {
+  if (!value || value.schemaVersion !== 1 || !Array.isArray(value.requirements) ||
+      !value.requirements.length) {
+    throw new Error('Spec requires schemaVersion: 1 and a non-empty requirements array.');
+  }
+  const ids = new Set();
+  for (const requirement of value.requirements) {
+    if (!requirement || !/^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$/.test(requirement.id || '')) {
+      throw new Error('Each requirement needs a stable ID such as REQ-001.');
+    }
+    if (ids.has(requirement.id)) throw new Error(`Duplicate requirement ID: ${requirement.id}`);
+    ids.add(requirement.id);
+    if (!text(requirement.description) || !text(requirement.source)) {
+      throw new Error(`${requirement.id} requires description and source reference to the original brief.`);
+    }
+    strings(requirement.acceptanceCriteria, `${requirement.id}.acceptanceCriteria`);
+    if (!['automated', 'manual'].includes(requirement.verification)) {
+      throw new Error(`${requirement.id}.verification must be automated or manual.`);
+    }
+  }
+  return value;
+}
+
+function validateTrace(value, requirement) {
+  if (!value || !['pending', 'blocked', 'passed'].includes(value.status)) {
+    throw new Error('Trace status must be pending, blocked or passed (no skipped completion).');
+  }
+  if (value.status !== 'passed') {
+    if (!text(value.notes)) throw new Error('Pending/blocked traces require explanatory notes.');
+    return value;
+  }
+  strings(value.implementation, 'Trace implementation');
+  strings(value.tests, 'Trace tests', requirement.verification === 'manual');
+  strings(value.evidence, 'Trace evidence');
+  if (requirement.verification === 'manual' && !value.tests.length && !text(value.testRationale)) {
+    throw new Error('Manual verification without automated tests requires testRationale.');
+  }
+  return value;
+}
+
+module.exports = { validateSpec, validateTrace };
