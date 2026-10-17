@@ -4,7 +4,7 @@
   "description": "Flutter delivery workflows, Copilot agents and portable evidence-based quality gates for Firebase and Supabase.",
   "main": "bin/cli.js",
   "bin": {
-    "flutter-crew": "./bin/cli.js"
+    "flutter-crew": "bin/cli.js"
   },
   "scripts": {
     "test": "node --test",
