@@ -18,6 +18,15 @@ function base(extra = {}) {
       { id: 'REQ-1', status: 'pending', acceptanceCriteria: ['a'], references: [] },
       { id: 'REQ-2', status: 'pending', acceptanceCriteria: ['b'], references: [] }
     ],
+    approvalStatus: { valid: !!extra.approved, status: extra.approved ? 'valid' : 'missing' },
+    verificationStatus: {
+      valid: !!extra.verification?.passed && !extra.sourceChangedSinceVerification,
+      status: !extra.verification ? 'missing' : (extra.sourceChangedSinceVerification ? 'stale'
+        : (extra.verification.passed ? 'valid' : 'failed')),
+      checks: (extra.verification?.checks || []).map((check) => ({
+        name: check.name, status: extra.sourceChangedSinceVerification ? 'stale' : (check.passed ? 'passed' : 'failed')
+      }))
+    },
     traceability: {}, acceptance: {}, verification: null, missingOrStaleCriteria: [], ...extra
   };
 }
@@ -34,8 +43,9 @@ test('spec baselined but not approved: approval is the active gate', () => {
   assert.deepEqual(statuses(p), ['completed', 'completed', 'active', 'pending', 'pending', 'pending', 'pending']);
 });
 
-test('stale approval (older than spec) does not unlock implementation', () => {
-  const p = derivePipeline(base({ approved: { at: iso(5), notes: 'old' } }), none);
+test('stale approval does not complete the runtime approval gate', () => {
+  const p = derivePipeline(base({ approved: { at: iso(20), notes: 'unbound' },
+    approvalStatus: { valid: false, status: 'stale' } }), none);
   assert.equal(p.stages[2].status, 'active');
   assert.equal(p.stages[3].status, 'pending');
   assert.ok(p.approvalStale);
@@ -53,10 +63,10 @@ test('lib edits keep implementation active (no early completion)', () => {
   assert.equal(p.stages[4].status, 'pending');
 });
 
-test('first test file flips implementation to done and testing to active', () => {
+test('first test file does not complete implementation or start testing', () => {
   const sig = { lib: { total: 5, changed: 3, changedFiles: [] }, test: { total: 2, changed: 1, changedFiles: ['x_test.dart'], latest: T0 } };
   const p = derivePipeline(base({ approved: { at: iso(20) } }), sig);
-  assert.deepEqual(statuses(p), ['completed', 'completed', 'completed', 'completed', 'active', 'pending', 'pending']);
+  assert.deepEqual(statuses(p), ['completed', 'completed', 'completed', 'active', 'pending', 'pending', 'pending']);
 });
 
 test('all requirements traced passed moves on to quality gates', () => {
@@ -92,7 +102,7 @@ test('verified: acceptance becomes active, then done on finish', () => {
   assert.equal(active.stages[6].status, 'active');
   const done = derivePipeline({ ...verified, status: 'done' }, none);
   assert.ok(done.stages.every((s) => s.status === 'completed'));
-  assert.equal(done.overallPct, 100);
+  assert.equal(done.completedStages, 7);
 });
 
 test('source change after verify makes quality gates stale again', () => {
@@ -107,14 +117,37 @@ test('source change after verify makes quality gates stale again', () => {
   assert.equal(p.stages[6].status, 'pending');
 });
 
-test('progress is monotonic across the flow', () => {
-  const steps = [
-    derivePipeline(base(), none).overallPct,
-    derivePipeline(base({ approved: { at: iso(20) } }), none).overallPct,
-    derivePipeline(base({ approved: { at: iso(20) } }), { ...none, lib: { total: 5, changed: 2, changedFiles: [] } }).overallPct,
-    derivePipeline(base({ approved: { at: iso(20) } }), { lib: { total: 5, changed: 2, changedFiles: [] }, test: { total: 1, changed: 1, changedFiles: [] } }).overallPct
-  ];
-  for (let i = 1; i < steps.length; i++) assert.ok(steps[i] > steps[i - 1], `step ${i}: ${steps}`);
+test('file timestamps never increase recorded completion or an estimated percentage', () => {
+  const report = base({ approved: { at: iso(20) } });
+  const before = derivePipeline(report, none);
+  const after = derivePipeline(report, {
+    lib: { total: 5, changed: 5, changedFiles: [] },
+    test: { total: 5, changed: 5, changedFiles: [] }
+  });
+  assert.deepEqual(statuses(before), statuses(after));
+  assert.equal(before.completedStages, after.completedStages);
+  assert.equal(after.overallPct, undefined);
+});
+
+test('explicit implementation records advance only when every requirement is complete', () => {
+  const report = base({ approved: { at: iso(20) }, taskStatus: [
+    { id: 'REQ-1', phase: 'implementation', status: 'done' },
+    { id: 'REQ-2', phase: 'implementation', status: 'in_progress' }
+  ] });
+  assert.equal(derivePipeline(report, none).stages[3].status, 'active');
+  report.taskStatus[1].status = 'done';
+  const complete = derivePipeline(report, none);
+  assert.equal(complete.stages[3].status, 'completed');
+  assert.equal(complete.stages[4].status, 'active');
+  report.taskStatus[1].status = 'stale';
+  assert.equal(derivePipeline(report, none).stages[3].status, 'active');
+});
+
+test('passing verification alone does not claim implementation and testing complete', () => {
+  const report = base({ approved: { at: iso(20) }, verification: { passed: true } });
+  const pipeline = derivePipeline(report, none);
+  assert.equal(pipeline.stages[3].status, 'active');
+  assert.equal(pipeline.stages[4].status, 'pending');
 });
 
 test('scanSignals counts only dart files touched since approval', () => {

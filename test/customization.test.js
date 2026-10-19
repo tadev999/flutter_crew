@@ -47,3 +47,17 @@ test('README keeps direct-prompt onboarding and valid local documentation links'
     assert.ok(fs.existsSync(path.join(root, decodeURIComponent(target.split('#')[0]))), target);
   }
 });
+
+test('delivery docs distinguish enforced approval and recorded work from file heuristics', () => {
+  for (const name of ['README.md', '.agents/workflows/feature-delivery.md',
+    '.agents/workflows/spec-driven-delivery.md']) {
+    const text = read(name);
+    assert.match(text, /spec revision/i);
+    assert.match(text, /resume/);
+    assert.match(text, /nextActions/);
+    assert.match(text, /task REQ-001 implementation in_progress/);
+    assert.match(text, /activity hints/);
+  }
+  assert.doesNotMatch(read('README.md'), /cannot modify source code until|progresses monotonically/);
+  assert.doesNotMatch(read('.agents/workflows/feature-delivery.md'), /approval timestamp \(Phase 3\)/);
+});

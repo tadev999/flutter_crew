@@ -36,11 +36,20 @@ function resolveProjectFile(root, relative) {
   return actual;
 }
 
-/** Write JSON atomically so a crash never leaves a half-written run state. */
-function writeJsonAtomic(file, value) {
+/** Publish complete content even when the watcher and a command write concurrently. */
+function writeFileAtomic(file, content) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(`${file}.tmp`, `${JSON.stringify(value, null, 2)}\n`);
-  fs.renameSync(`${file}.tmp`, file);
+  const temporary = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  try {
+    fs.writeFileSync(temporary, content, 'utf8');
+    fs.renameSync(temporary, file);
+  } finally {
+    fs.rmSync(temporary, { force: true });
+  }
+}
+
+function writeJsonAtomic(file, value) {
+  writeFileAtomic(file, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 /** Move a file or directory into `destination`, creating parents. No-op if missing. */
@@ -52,4 +61,4 @@ function moveInto(source, destination) {
   return true;
 }
 
-module.exports = { hash, hashFile, read, listFiles, resolveProjectFile, writeJsonAtomic, moveInto };
+module.exports = { hash, hashFile, read, listFiles, resolveProjectFile, writeFileAtomic, writeJsonAtomic, moveInto };

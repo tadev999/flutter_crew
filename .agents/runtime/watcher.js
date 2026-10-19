@@ -29,14 +29,14 @@ function ensureWatcher(root, entry) {
 /**
  * Long-running loop: re-render the dashboard every few seconds so phases advance
  * while the agent is editing files and running no runtime command.
- * Exits when the run disappears, finishes, or after LIMITS.watchMaxAgeMs.
+ * Continues after DONE to detect stale evidence. Exits when the run disappears
+ * or after LIMITS.watchMaxAgeMs.
  * @param {() => ({status?: string}|undefined)} render re-renders and returns the report
  */
 function watch(root, render, { intervalMs = LIMITS.watchIntervalMs } = {}) {
   const pidFile = path.join(root, PATHS.watcherPid);
   const runFile = path.join(root, PATHS.runFile);
   const startedAt = Date.now();
-  let doneTicks = 0;
 
   fs.mkdirSync(path.dirname(pidFile), { recursive: true });
   fs.writeFileSync(pidFile, String(process.pid));
@@ -49,10 +49,7 @@ function watch(root, render, { intervalMs = LIMITS.watchIntervalMs } = {}) {
 
   const tick = () => {
     if (!fs.existsSync(runFile) || Date.now() - startedAt > LIMITS.watchMaxAgeMs) return stop();
-    let report;
-    try { report = render(); } catch { /* keep watching */ }
-    doneTicks = report?.status === 'done' ? doneTicks + 1 : 0;
-    if (doneTicks >= LIMITS.watchDoneTicks) stop();
+    try { render(); } catch (error) { console.error(`Dashboard refresh failed: ${error.message}`); }
   };
   tick();
   setInterval(tick, intervalMs);

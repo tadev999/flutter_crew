@@ -66,7 +66,6 @@ const LIMITS = Object.freeze({
   commandMaxBuffer: 16 * 1024 * 1024,
   watchIntervalMs: 3000,
   watchMaxAgeMs: 12 * 3600 * 1000,
-  watchDoneTicks: 2,
   scanFileLimit: 5000
 });
 

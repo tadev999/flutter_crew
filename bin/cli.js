@@ -8,7 +8,7 @@ const readline = require('readline');
 const rootSource = path.resolve(__dirname, '..');
 const arg = process.argv[2];
 
-const runtimeCommands = ['start', 'spec', 'trace', 'status', 'verify', 'accept', 'finish', 'dashboard', 'approve', 'archive'];
+const runtimeCommands = ['start', 'spec', 'trace', 'status', 'resume', 'task', 'verify', 'accept', 'finish', 'dashboard', 'approve', 'archive'];
 
 const itemsToCopy = [
   '.vscode',
@@ -366,4 +366,3 @@ if (runtimeCommands.includes(arg)) {
 }
 
 module.exports = { installAgentsTo, uninstallAgentsFrom };
-

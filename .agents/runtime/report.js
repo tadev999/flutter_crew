@@ -56,7 +56,7 @@ function traceStatus(root, manifest, current) {
       status = 'stale';
     }
     return {
-      id: requirement.id, status,
+      id: requirement.id, status, recordedStatus: entry?.status || null, recordedAt: entry?.at || null,
       description: requirement.description || '', source: requirement.source || '',
       acceptanceCriteria: requirement.acceptanceCriteria || [],
       verification: requirement.verification || 'automated',
@@ -74,6 +74,113 @@ function traceStatus(root, manifest, current) {
 const staleCriteria = (root, manifest, current) => CRITERIA.filter((id) =>
   !artifactValid(root, manifest.acceptance?.[id]) || manifest.acceptance[id].snapshot !== current);
 
+function approvalStatus(root, manifest, spec = specStatus(root, manifest)) {
+  const approval = manifest.approved;
+  const baseline = manifest.spec;
+  const valid = !!baseline && !!approval?.at && Number.isFinite(Date.parse(approval.at)) &&
+    approval.specRevision === baseline.revision && approval.specHash === baseline.hash &&
+    approval.requirementsHash === baseline.requirementsHash && spec.issues.length === 0;
+  return {
+    status: valid ? 'valid' : (approval ? 'stale' : 'missing'),
+    valid,
+    issues: valid ? [] : [
+      approval
+        ? 'Developer approval is stale or unbound. Review the current spec and run approve again.'
+        : 'Developer approval is missing. Review the current spec and run approve.'
+    ]
+  };
+}
+
+function verificationStatus(root, manifest, current) {
+  const verification = manifest.verification;
+  const issues = [];
+  if (!verification?.passed || verification.snapshot !== current) {
+    issues.push('A passing verify for current inputs is required.');
+  }
+  const checks = verification?.checks || [];
+  if (verification && (checks.length !== GATES.length ||
+      !GATES.every((gate) => checks.filter((check) => check.name === gate.name && check.passed).length === 1))) {
+    issues.push('A passing verify with all format/analyze/tests gates is required.');
+  }
+  for (const check of checks) {
+    try {
+      if (!check.hash) issues.push(`Missing ${check.name} execution-log hash. Run verify again.`);
+      else if (hashFile(resolveProjectFile(root, check.log)) !== check.hash) issues.push(`Changed ${check.name} execution log.`);
+    } catch { issues.push(`Missing ${check.name} execution log.`); }
+  }
+  return {
+    status: !verification ? 'missing' : (issues.length ? (verification.passed ? 'stale' : 'failed') : 'valid'),
+    valid: issues.length === 0, issues,
+    checks: GATES.map(({ name }) => {
+      const matches = checks.filter((check) => check.name === name);
+      const check = matches[0];
+      const status = !check ? 'pending'
+        : (matches.length !== 1 || verification.snapshot !== current || !artifactValid(root, check, 'log')
+          ? 'stale' : (check.passed ? 'passed' : 'failed'));
+      return { name, status };
+    })
+  };
+}
+
+function taskStatus(manifest, current, specIssues) {
+  return (manifest.spec?.ids || []).flatMap((id) =>
+    Object.entries(manifest.tasks?.[id] || {}).map(([phase, entry]) => {
+      const stale = specIssues.length > 0 || entry.specRevision !== manifest.spec.revision ||
+        entry.specHash !== manifest.spec.hash || entry.requirementsHash !== manifest.spec.requirementsHash ||
+        (entry.status === 'done' && entry.snapshot !== current);
+      return { ...entry, id, phase, recordedStatus: entry.status, status: stale ? 'stale' : entry.status };
+    }));
+}
+
+const command = (args) => `node .agents/runtime/crew.js ${args}`;
+const quote = (value) => JSON.stringify(value);
+
+function nextActions(report) {
+  const actions = [];
+  const add = (kind, issue, cause, commands, context = {}) =>
+    actions.push({ kind, issue, cause, commands: commands.map(command), ...context });
+  if (report.specIssues.length) {
+    add('spec', 'Spec baseline needs attention', report.specIssues.join(' '),
+      [report.spec ? `spec ${quote(report.spec.path)} <reviewed-impact.md>` : 'spec <spec.json>']);
+  }
+  if (!report.approvalStatus.valid) {
+    add('approval', 'Developer approval required', report.approvalStatus.issues.join(' '), ['approve "<developer decision>"']);
+  }
+  if (report.preflight.length) {
+    add('preflight', 'Project prerequisites are blocked', report.preflight.join(' '), ['verify']);
+  }
+  if (report.sourceChangedSinceVerification) {
+    add('verify', 'Source changed',
+      'Inputs changed since verification. Re-run verify and review stale traces/attestations.', ['verify']);
+  }
+  for (const entry of report.taskStatus.filter((entry) => entry.status !== 'done')) {
+    add('task', `${entry.id} ${entry.phase}: ${entry.status}`, entry.notes,
+      [`task ${entry.id} ${entry.phase} ${entry.status === 'in_progress' ? 'done "<completed work>"' : 'in_progress "<remaining work>"'}`],
+      { requirementId: entry.id, phase: entry.phase, state: entry.status });
+  }
+  for (const entry of report.requirementStatus.filter((entry) => entry.status !== 'passed')) {
+    add('trace', `${entry.id}: ${entry.status}`,
+      entry.status === 'stale' ? 'Source, spec, trace report or linked evidence changed; inspect and revalidate this requirement.'
+        : (entry.notes || 'Implement and test this requirement, then record reviewed evidence.'),
+      [`trace ${entry.id} ${entry.evidence ? quote(entry.evidence) : '<trace.json>'}`],
+      { requirementId: entry.id, state: entry.status });
+  }
+  if (!report.verificationStatus.valid && !report.sourceChangedSinceVerification) {
+    add('verify', 'Verification required', report.verificationStatus.issues.join(' '), ['verify']);
+  }
+  for (const id of report.missingOrStaleCriteria) {
+    const entry = report.acceptance?.[id];
+    add('review', `${id}: ${entry ? 'stale' : 'missing'} review`,
+      'Review current source and evidence before recording the attestation.',
+      [`accept ${id} ${entry ? quote(entry.evidence) : '<reviewed-evidence.md>'}`],
+      { criterionId: id, state: entry ? 'stale' : 'pending' });
+  }
+  if (!actions.length && report.status !== 'done') {
+    add('finish', 'Ready to finish', 'All required evidence is current.', ['finish']);
+  }
+  return actions;
+}
+
 /**
  * Derive the full live report (manifest + computed requirement/gate state).
  * The single place that status, dashboard and watcher all read from.
@@ -82,25 +189,43 @@ function buildReport(root, manifest) {
   const current = snapshot(root, manifest);
   const missing = staleCriteria(root, manifest, current);
   const trace = traceStatus(root, manifest, current);
+  const approval = approvalStatus(root, manifest, { issues: trace.specIssues });
+  const verification = verificationStatus(root, manifest, current);
+  const tasks = taskStatus(manifest, current, trace.specIssues);
+  const prerequisites = preflight(root, manifest.backend);
+  const acceptanceIssues = missing.map((id) =>
+    `${manifest.acceptance?.[id] && !artifactValid(root, manifest.acceptance[id]) ? 'Invalid' : 'Missing/stale'} ${id} evidence.`);
+  const issues = [...prerequisites, ...trace.issues, ...approval.issues, ...verification.issues,
+    ...acceptanceIssues, ...tasks.filter((entry) => entry.status !== 'done')
+      .map((entry) => `${entry.id} ${entry.phase}: ${entry.status}`)];
+  const invalidated = manifest.status === 'done' || manifest.status === 'blocked' ||
+    approval.status === 'stale' || verification.status === 'stale' || verification.status === 'failed' ||
+    missing.some((id) => !!manifest.acceptance?.[id]) ||
+    tasks.some((entry) => entry.status === 'blocked' || entry.status === 'stale') ||
+    trace.requirements.some((entry) => entry.status === 'blocked' || entry.status === 'stale');
   const report = {
     ...manifest, requirementStatus: trace.requirements, specIssues: trace.specIssues,
+    status: issues.length ? (invalidated ? 'blocked' : 'in_progress')
+      : (manifest.status === 'done' ? 'done' : 'in_progress'),
     missingOrStaleCriteria: missing,
-    sourceChangedSinceVerification: manifest.verification?.snapshot !== current,
-    preflight: preflight(root, manifest.backend)
+    sourceChangedSinceVerification: !!manifest.verification && manifest.verification.snapshot !== current,
+    preflight: prerequisites, approvalStatus: approval, verificationStatus: verification,
+    taskStatus: tasks, completionIssues: issues
+  };
+  report.nextActions = nextActions(report);
+  report.nextAction = report.nextActions[0] || null;
+  report.resume = {
+    retained: {
+      spec: trace.specIssues.length === 0,
+      approval: approval.valid,
+      verification: verification.valid,
+      requirements: trace.requirements.filter((entry) => entry.status === 'passed').map((entry) => entry.id),
+      criteria: CRITERIA.filter((id) => !missing.includes(id)),
+      tasks: tasks.filter((entry) => entry.status === 'done').map(({ id, phase }) => ({ id, phase }))
+    },
+    remaining: report.nextActions
   };
   return { report, trace, missing };
-}
-
-/** A manifest that claims `done` is downgraded to `blocked` if any gate no longer holds. */
-function guardDoneStatus(root, manifest, { report, trace, missing }) {
-  const verification = manifest.verification;
-  const logsValid = verification?.checks?.length === GATES.length &&
-    verification.checks.every((check) => check.passed && artifactValid(root, check, 'log'));
-  if (manifest.status === 'done' && (!verification?.passed || !logsValid || trace.issues.length ||
-      missing.length || report.sourceChangedSinceVerification || report.preflight.length)) {
-    report.status = 'blocked';
-  }
-  return report;
 }
 
 const EMPTY_REPORT = Object.freeze({
@@ -109,14 +234,11 @@ const EMPTY_REPORT = Object.freeze({
 
 /** Re-render dashboard.html from the current run (or an empty state when none exists). */
 function refreshDashboard(root, store) {
-  let report;
-  try {
-    report = buildReport(root, store.load()).report;
-  } catch { report = { ...EMPTY_REPORT }; }
+  const report = store.exists() ? buildReport(root, store.load()).report : { ...EMPTY_REPORT };
   return { htmlPath: writeDashboard(root, report), report };
 }
 
 module.exports = {
-  snapshot, artifactValid, specStatus, traceStatus, buildReport, guardDoneStatus,
+  snapshot, artifactValid, specStatus, traceStatus, approvalStatus, buildReport,
   refreshDashboard, EMPTY_REPORT
 };

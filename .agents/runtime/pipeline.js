@@ -2,14 +2,9 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { GATES, CRITERIA } = require('./constants');
 
 const SKIP_DIRS = new Set(['.git', '.dart_tool', 'build', 'node_modules', '.fluttercrew', '.idea']);
-const GATES = [
-  { name: 'format', label: 'dart format', sub: 'Code formatting style' },
-  { name: 'analyze', label: 'flutter analyze', sub: 'Linter & type checking' },
-  { name: 'tests', label: 'flutter test', sub: 'Unit & widget test suites' }
-];
-const CRITERIA = ['requirements', 'design', 'backend', 'security', 'experience'];
 
 /**
  * Walk a source directory and report how many .dart files exist and how many
@@ -55,11 +50,8 @@ const ts = (value) => (value ? new Date(value).getTime() : 0);
 const step = (label, state, detail = '') => ({ label, state, detail });
 
 /**
- * Derive the 7-stage pipeline from run state + filesystem signals.
- *
- * Stages are strictly sequential: a stage can only start once the previous one
- * started, so statuses can never "jump" (e.g. Testing DONE while Implementation
- * is still pending). Each stage exposes evidence-based checklist steps.
+ * Project the canonical live report into stages. Filesystem timestamps are
+ * activity hints only; they never complete a stage or contribute progress.
  */
 function derivePipeline(report, signals = {}) {
   const lib = signals.lib || { total: 0, changed: 0, changedFiles: [] };
@@ -69,48 +61,52 @@ function derivePipeline(report, signals = {}) {
 
   const status = report?.status || 'not_started';
   const isStarted = !!report?.requirements;
-  const hasSpec = !!report?.spec;
+  const hasSpec = !!report?.spec && !(report?.specIssues || []).length;
   const reqs = report?.requirementStatus || [];
   const totalReqs = reqs.length;
   const passedReqs = reqs.filter((r) => r.status === 'passed').length;
   const tracedAny = Object.keys(report?.traceability || {}).length > 0;
   const tracedCount = Object.keys(report?.traceability || {}).length;
 
-  const specAt = ts(report?.spec?.at);
-  const approvedAt = ts(report?.approved?.at);
-  const approvedValid = hasSpec && !!report?.approved && (specAt === 0 || approvedAt >= specAt - 1000);
-  const approvalStale = hasSpec && !!report?.approved && !approvedValid;
+  const approvedValid = hasSpec && report?.approvalStatus?.valid === true;
+  const approvalStale = report?.approvalStatus?.status === 'stale';
 
   const checks = report?.verification?.checks || [];
   const hasChecks = checks.length > 0;
   const verificationPassed = !!report?.verification?.passed;
-  const verificationStale = verificationPassed && !!report?.sourceChangedSinceVerification;
-  const verificationFresh = verificationPassed && !verificationStale;
+  const verificationFresh = report?.verificationStatus?.valid === true;
+  const verificationStale = verificationPassed && !verificationFresh;
   const acceptances = report?.acceptance || {};
   const missing = report?.missingOrStaleCriteria || [];
   const acceptedCount = CRITERIA.filter((c) => !!acceptances[c] && !missing.includes(c)).length;
 
   const allRequirementsPassed = totalReqs > 0 && passedReqs === totalReqs;
-  const testStarted = approvedValid && (testChanged > 0 || tracedAny || hasChecks || verificationFresh);
-  const testDone = approvedValid && (allRequirementsPassed || verificationFresh);
+  const tasks = report?.taskStatus || [];
+  const phaseComplete = (phase) => totalReqs > 0 && reqs.every((req) => {
+    const task = tasks.find((entry) => entry.id === req.id && entry.phase === phase);
+    return task ? task.status === 'done' : req.status === 'passed';
+  });
+  const implementationDone = approvedValid && phaseComplete('implementation');
+  const testStarted = implementationDone;
+  const testDone = testStarted && allRequirementsPassed && phaseComplete('testing');
 
   const cond = [
     { start: true, done: isStarted },
     { start: isStarted, done: hasSpec },
     { start: hasSpec, done: approvedValid },
-    { start: approvedValid, done: testStarted },
+    { start: approvedValid, done: implementationDone },
     { start: testStarted, done: testDone },
-    { start: testDone || (approvedValid && hasChecks), done: verificationFresh },
-    { start: verificationFresh, done: status === 'done' }
+    { start: testDone, done: verificationFresh },
+    { start: testDone && verificationFresh, done: status === 'done' }
   ];
 
   const started = [];
-  cond.forEach((c, i) => { started[i] = c.start && (i === 0 || started[i - 1]); });
+  cond.forEach((c, i) => { started[i] = c.start && (i === 0 || (started[i - 1] && cond[i - 1].done)); });
 
   const statuses = cond.map((c, i) => {
     if (!started[i]) return 'pending';
     if (c.done) return 'completed';
-    if (i === 5 && hasChecks && !verificationPassed) return 'failed';
+    if (i === 5 && report?.verificationStatus?.status === 'failed') return 'failed';
     return 'active';
   });
   // First stage after a completed run of stages becomes active.
@@ -149,19 +145,20 @@ function derivePipeline(report, signals = {}) {
         : (approvalStale ? 'Spec revised - re-approval required' : (hasSpec ? 'Awaiting Developer review & approval' : 'Pending spec')),
       steps: [
         step('Developer reviewed REQs & criteria', pickState(approvedValid, hasSpec && !approvedValid), approvedValid ? (report.approved.notes || '') : ''),
-        approvalStale ? step('Previous approval is stale (older than current spec)', 'fail', 'run: crew.js approve "<notes>"')
-          : step('Coding unlocked', pickState(approvedValid, false))
+        approvalStale ? step('Approval does not match the current spec baseline', 'fail', 'run: crew.js approve "<notes>"')
+          : step('Runtime approval gate satisfied', pickState(approvedValid, false))
       ]
     },
     {
       id: 'implementation', number: 4, title: 'MVVM Implementation', agent: 'flutter-reviewer',
       at: lib.changed > 0 ? lib.latest : null,
-      desc: statuses[3] === 'completed' ? `MVVM slices written (${lib.changed} lib files touched)`
-        : (approvedValid ? (lib.changed > 0 ? `Coding in progress - ${lib.changed} lib file(s) changed` : 'Ready to code MVVM slices') : 'Pending approval'),
+      desc: statuses[3] === 'completed' ? 'Implementation recorded for all requirements'
+        : (approvedValid ? 'Record implementation tasks or complete requirement traces' : 'Pending approval'),
       steps: [
-        step('Models / services / viewmodels / views', pickState(testStarted, approvedValid && !testStarted),
-          lib.changed > 0 ? `${lib.changed} of ${lib.total} lib files changed since approval` : 'no lib changes yet'),
-        step('Source touched since approval', pickState(lib.changed > 0, approvedValid && lib.changed === 0), (lib.changedFiles || []).slice(0, 3).join(', '))
+        step('Implementation tasks / passed traces', pickState(implementationDone, approvedValid && !implementationDone),
+          'Explicit records, not file modification times'),
+        step('Source activity (hint only)', lib.changed > 0 ? 'active' : 'todo',
+          `${lib.changed} lib files touched; ${(lib.changedFiles || []).slice(0, 3).join(', ')}`)
       ]
     },
     {
@@ -170,7 +167,7 @@ function derivePipeline(report, signals = {}) {
       desc: statuses[4] === 'completed' ? `${passedReqs}/${totalReqs} requirements test-verified`
         : (testStarted ? `${testChanged} test file(s) changed - ${passedReqs}/${totalReqs} REQs traced passed` : 'Awaiting unit test suites'),
       steps: [
-        step('Test files written', pickState(testChanged > 0 || tracedAny, testStarted && testChanged === 0),
+        step('Test activity (hint only)', testChanged > 0 ? 'active' : 'todo',
           testChanged > 0 ? `${testChanged} changed (${(test.changedFiles || []).slice(0, 2).join(', ')})` : 'no test changes yet'),
         step('Requirements traced to code/tests/evidence', pickState(allRequirementsPassed, tracedAny && !allRequirementsPassed), `${tracedCount}/${totalReqs} traced`),
         step('All REQs passed', pickState(allRequirementsPassed, false), `${passedReqs}/${totalReqs}`)
@@ -180,12 +177,14 @@ function derivePipeline(report, signals = {}) {
       id: 'verify', number: 6, title: 'Quality Gates', agent: 'crew.js runtime',
       at: report?.verification?.at,
       desc: verificationFresh ? 'Format, analyze & tests PASSED'
-        : (verificationStale ? 'Verification stale - source changed, re-run verify'
+        : (verificationStale ? 'Verification stale - inputs or execution logs changed, re-run verify'
           : (hasChecks ? (verificationPassed ? 'Passed' : 'Gate failed - fix and re-run verify') : (started[5] ? 'Ready: run crew.js verify' : 'Queued'))),
       steps: GATES.map((g) => {
         const c = checks.find((x) => x.name === g.name);
-        if (!c) return step(g.label, started[5] && !hasChecks ? 'active' : 'todo', 'not run');
-        return step(g.label, c.passed ? (verificationStale ? 'fail' : 'done') : 'fail', verificationStale ? 'stale' : (c.passed ? 'passed' : `failed - see ${c.log || 'log'}`));
+        const state = report?.verificationStatus?.checks?.find((check) => check.name === g.name)?.status || 'pending';
+        if (state === 'pending') return step(g.label, started[5] && !hasChecks ? 'active' : 'todo', 'not run');
+        return step(g.label, state === 'passed' ? 'done' : 'fail',
+          state === 'failed' ? `failed - see ${c?.log || 'log'}` : state);
       })
     },
     {
@@ -202,26 +201,9 @@ function derivePipeline(report, signals = {}) {
 
   const stages = stageDefs.map((d, i) => ({ ...d, status: statuses[i] }));
 
-  // ---- Weighted overall progress -----------------------------------------
-  const weights = [5, 10, 10, 25, 20, 15, 15];
-  const partial = [
-    isStarted ? 1 : 0,
-    hasSpec ? 1 : (isStarted ? 0.4 : 0),
-    approvedValid ? 1 : (hasSpec ? 0.3 : 0),
-    lib.changed > 0 ? 0.6 : 0.1,
-    totalReqs ? (0.3 * (testChanged > 0 ? 1 : 0) + 0.7 * (passedReqs / totalReqs)) : 0,
-    hasChecks ? checks.filter((c) => c.passed).length / 3 : 0.05,
-    acceptedCount / 5
-  ];
-  let overallPct = 0;
-  stages.forEach((s, i) => {
-    if (s.status === 'completed') overallPct += weights[i];
-    else if (s.status === 'active' || s.status === 'failed') overallPct += weights[i] * Math.min(partial[i], 0.95);
-  });
-  overallPct = status === 'done' ? 100 : Math.min(99, Math.round(overallPct));
-
+  const completedStages = stages.filter((stage) => stage.status === 'completed').length;
   const current = stages.find((s) => s.status === 'active' || s.status === 'failed') || stages[stages.length - 1];
-  return { stages, overallPct, current, approvedValid, approvalStale, testChanged, acceptedCount, verificationFresh, verificationStale };
+  return { stages, completedStages, current, approvedValid, approvalStale, testChanged, acceptedCount, verificationFresh, verificationStale };
 }
 
 function backendLabel(backend) {

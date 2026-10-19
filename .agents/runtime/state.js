@@ -32,7 +32,7 @@ function createStore(root) {
 function newManifest({ requirements, backend }) {
   return {
     schemaVersion: SCHEMA_VERSION, status: 'in_progress', requirements, backend,
-    startedAt: new Date().toISOString(), spec: null, traceability: {}, acceptance: {}, verification: null
+    startedAt: new Date().toISOString(), spec: null, tasks: {}, traceability: {}, acceptance: {}, verification: null
   };
 }
 

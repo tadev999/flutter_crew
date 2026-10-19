@@ -34,6 +34,11 @@ the exact spec/brief hashes. An empty/duplicate/malformed spec is rejected.
 Existing v1 runs remain readable but cannot verify/finish without a spec baseline;
 baselining upgrades state to schema v2 and clears old gates/attestations.
 
+Present the baseline to the developer, then run `node .agents/runtime/crew.js approve`
+only after their decision. Approval records the spec revision and spec/brief
+hashes; timestamps alone do not qualify. Missing or stale approval blocks
+`verify`/`finish`, not filesystem edits. Runtime cannot authenticate the approver.
+
 The runtime requires references, not semantic proof. A reviewer must ensure source
 references really map to the brief; file existence alone is not coverage.
 
@@ -43,6 +48,12 @@ Plan tasks by requirement ID and vertical slice, then implement with selective T
 business logic/state/security/regression => failing test, implementation, refactor.
 Use widget/golden/integration tests where appropriate. Do not force TDD ceremony
 for every color/spacing change; do not use manual verification to evade logic tests.
+
+Record task progress with
+`node .agents/runtime/crew.js task REQ-001 implementation in_progress "<work>"`.
+Use phases `implementation|testing` and states `pending|in_progress|done|blocked`,
+with explanatory notes. Mark done only after doing the work; declarations never
+replace executed evidence. File mtimes/new tests are only activity hints.
 
 Write one JSON trace report per ID using .agents/templates/trace.example.json.
 Run `node .agents/runtime/crew.js trace REQ-001 .fluttercrew/traces/REQ-001.json`.
@@ -80,11 +91,16 @@ risks and re-verification steps. Obtain user agreement for removed/deferred scop
 record that decision honestly, never imply a file proves authorization by itself.
 Keep IDs stable. Retain old baseline metadata in run history; git preserves spec
 contents. Rebaseline clears ALL traces, verification and global attestations, even
-for apparently unaffected IDs, to avoid silently reusing stale claims.
+for apparently unaffected IDs, to avoid silently reusing stale claims. It also
+invalidates approval and task records; obtain approval for the new revision and
+reconcile retained tasks before continuing.
 
 ## 5. Review and close
 
 `status` lists spec issues and each requirement's pending/blocked/passed/stale state.
+`resume` returns the same live report with retained valid evidence and actionable
+remaining work. It does not clear state or rerun checks. Follow `nextActions` and
+reuse current evidence instead of repeating planning or verification unnecessarily.
 Independently check the brief-to-spec completeness, then ID-to-code/test/evidence
 coverage. A generic backend report cannot substitute for an omitted requirement.
 Run verify and review current traces, register the five global attestations, then

@@ -2,7 +2,7 @@
 
 const path = require('node:path');
 const { writeDashboard } = require('../dashboard');
-const { buildReport, guardDoneStatus, refreshDashboard } = require('../report');
+const { buildReport, refreshDashboard } = require('../report');
 const { watch } = require('../watcher');
 const { parseArgs } = require('./args');
 const { present } = require('./lifecycle');
@@ -10,7 +10,7 @@ const { present } = require('./lifecycle');
 function status(ctx) {
   const { root, store } = ctx;
   const manifest = store.load();
-  const report = guardDoneStatus(root, manifest, buildReport(root, manifest));
+  const report = buildReport(root, manifest).report;
   writeDashboard(root, report);
   console.log(JSON.stringify(report, null, 2));
   return report;

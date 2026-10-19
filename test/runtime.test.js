@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const { run, preflight, criteria, commandCheck } = require('../.agents/runtime/crew');
 const { validateSpec } = require('../.agents/runtime/spec');
 
@@ -35,10 +35,11 @@ function project(t) {
     console.log = () => {};
     try { return run(args, root, runner); } finally { console.log = original; }
   };
-  const start = (backend = 'none') => {
+  const start = (backend = 'none', approved = true) => {
     const manifest = invoke(['start', 'requirements.md', backend]);
     write('spec.json', JSON.stringify(spec));
     invoke(['spec', 'spec.json']);
+    if (approved) invoke(['approve', 'Node fixture developer decision']);
     return manifest;
   };
   const trace = (id = 'REQ-001', overrides = {}) => {
@@ -496,6 +497,7 @@ test('agent-captured inline request needs no special filename and retains delive
   p.spec.requirements[0].source = `${source}: User request`;
   p.write('spec.json', JSON.stringify(p.spec));
   p.invoke(['spec', 'spec.json']);
+  p.invoke(['approve']);
   p.invoke(['verify']);
   assert.throws(() => p.invoke(['finish']), /REQ-001: pending/);
   p.attest();
@@ -598,4 +600,273 @@ test('CLI uninstalls fleet and restores backed up files', (t) => {
   assert.equal(fs.existsSync(path.join(p.root, '.fluttercrew')), false);
   assert.equal(fs.existsSync(path.join(p.root, '.github/prompts')), false);
   assert.equal(fs.readFileSync(path.join(p.root, 'AGENTS.md'), 'utf8'), 'User custom instructions');
+});
+
+test('approval is required by verify and finish, not just the workflow', (t) => {
+  const p = project(t);
+  p.start('none', false);
+  p.attest();
+  assert.throws(() => p.invoke(['verify']), /approval is missing/);
+  assert.equal(p.calls.length, 0);
+  assert.throws(() => p.invoke(['finish']), /approval is missing/);
+  const approved = p.invoke(['approve', 'Reviewed REQ-001']);
+  assert.equal(approved.approved.specRevision, approved.spec.revision);
+  assert.equal(approved.approved.specHash, approved.spec.hash);
+  assert.equal(approved.approved.requirementsHash, approved.spec.requirementsHash);
+  p.invoke(['verify']);
+  assert.equal(p.invoke(['finish']).status, 'done');
+});
+
+test('legacy timestamp-only approval is stale even with all passing evidence', (t) => {
+  const p = project(t);
+  p.start();
+  p.invoke(['verify']);
+  p.attest();
+  const manifest = p.invoke(['finish']);
+  manifest.approved = { at: new Date().toISOString(), notes: 'Legacy approval' };
+  p.write('.fluttercrew/run.json', JSON.stringify(manifest));
+  assert.equal(p.invoke(['status']).approvalStatus.status, 'stale');
+  assert.equal(p.invoke(['dashboard']).report.status, 'blocked');
+  assert.throws(() => p.invoke(['finish']), /approval is stale or unbound/);
+  const calls = p.calls.length;
+  assert.throws(() => p.invoke(['verify']), /approval is stale or unbound/);
+  assert.equal(p.calls.length, calls);
+});
+
+test('approve rejects dirty spec, brief and impact reports; revisions require reapproval', (t) => {
+  const p = project(t);
+  p.start();
+  const original = p.invoke(['status']).approved;
+  p.spec.requirements[0].description = 'Updated scope';
+  p.write('spec.json', JSON.stringify(p.spec));
+  assert.throws(() => p.invoke(['approve']), /Spec changed/);
+  p.write('change.md', 'Reviewed scope and regression impact');
+  p.invoke(['spec', 'spec.json', 'change.md']);
+  assert.deepEqual(p.invoke(['status']).approved, original);
+  assert.equal(p.invoke(['status']).approvalStatus.status, 'stale');
+  assert.throws(() => p.invoke(['verify']), /approval is stale/);
+  p.invoke(['approve']);
+  p.invoke(['verify']);
+  p.write('requirements.md', 'Changed brief');
+  assert.throws(() => p.invoke(['approve']), /Original requirements changed/);
+  p.write('requirements.md', 'Implement a real feature.');
+  p.write('change.md', 'Changed impact evidence');
+  assert.throws(() => p.invoke(['approve']), /impact report/);
+});
+
+test('unchanged spec preserves approval and resume leaves all valid evidence untouched', (t) => {
+  const p = project(t);
+  p.start();
+  p.invoke(['verify']);
+  p.attest();
+  p.invoke(['finish']);
+  const before = fs.readFileSync(path.join(p.root, '.fluttercrew/run.json'), 'utf8');
+  p.invoke(['spec', 'spec.json']);
+  const report = p.invoke(['resume']);
+  assert.equal(report.status, 'done');
+  assert.deepEqual(report.resume.retained, {
+    spec: true, approval: true, verification: true, requirements: ['REQ-001'], criteria, tasks: []
+  });
+  assert.deepEqual(report.resume.remaining, []);
+  assert.equal(fs.readFileSync(path.join(p.root, '.fluttercrew/run.json'), 'utf8'), before);
+  assert.equal(p.calls.length, 3);
+});
+
+for (const [name, file, content] of [
+  ['source', 'lib/main.dart', 'void main() { /* update */ }'],
+  ['spec', 'spec.json', '{}'],
+  ['brief', 'requirements.md', 'Changed brief'],
+  ['review', '.fluttercrew/evidence/backend.md', 'Changed review'],
+  ['trace', '.fluttercrew/traces/REQ-001.json', '{}'],
+  ['linked evidence', '.fluttercrew/evidence/feature.md', 'Changed evidence'],
+  ['execution log', '.fluttercrew/logs/tests.txt', 'Changed log']
+]) {
+  test(`status, dashboard and watcher renderer agree after ${name} changes`, (t) => {
+    const p = project(t);
+    p.start();
+    p.invoke(['verify']);
+    p.attest();
+    p.invoke(['finish']);
+    p.write(file, content);
+    const status = p.invoke(['status']);
+    const dashboard = p.invoke(['dashboard']).report;
+    const { refreshDashboard } = require('../.agents/runtime/report');
+    const { createStore } = require('../.agents/runtime/state');
+    const watcherReport = refreshDashboard(p.root, createStore(p.root)).report;
+    assert.equal(status.status, 'blocked');
+    assert.deepEqual(dashboard, status);
+    assert.deepEqual(watcherReport, status);
+    const html = fs.readFileSync(path.join(p.root, '.fluttercrew/dashboard.html'), 'utf8');
+    assert.match(html, /status: blocked/);
+    assert.match(html, /Next Action/);
+    assert.throws(() => p.invoke(['finish']));
+  });
+}
+
+test('resume requests only the invalidated review, retaining verification and other evidence', (t) => {
+  const p = project(t);
+  p.start();
+  p.invoke(['verify']);
+  p.attest();
+  p.invoke(['finish']);
+  p.write('.fluttercrew/evidence/backend.md', 'Changed backend report');
+  const report = p.invoke(['resume']);
+  assert.equal(report.resume.retained.verification, true);
+  assert.deepEqual(report.resume.retained.requirements, ['REQ-001']);
+  assert.deepEqual(report.resume.retained.criteria, criteria.filter((id) => id !== 'backend'));
+  assert.deepEqual(report.nextActions.map((entry) => entry.kind), ['review']);
+  assert.deepEqual(report.nextAction.commands, [
+    'node .agents/runtime/crew.js accept backend ".fluttercrew/evidence/backend.md"'
+  ]);
+  assert.equal(p.calls.length, 3);
+});
+
+test('resume identifies source changes and exact commands for stale work', (t) => {
+  const p = project(t);
+  p.start();
+  p.invoke(['verify']);
+  p.attest();
+  p.write('lib/main.dart', 'void main() { /* changed */ }');
+  const report = p.invoke(['resume']);
+  assert.equal(report.nextAction.issue, 'Source changed');
+  assert.deepEqual(report.nextAction.commands, ['node .agents/runtime/crew.js verify']);
+  assert.equal(report.resume.retained.approval, true);
+  assert.equal(report.resume.retained.verification, false);
+  assert.deepEqual(report.resume.retained.requirements, []);
+  assert.deepEqual(report.resume.retained.criteria, []);
+  assert.equal(report.nextActions.filter((entry) => entry.kind === 'review').length, 5);
+  assert.equal(report.nextActions.filter((entry) => entry.kind === 'trace').length, 1);
+});
+
+test('invalid or incomplete verification records cannot finish or appear current', (t) => {
+  const p = project(t);
+  p.start();
+  p.invoke(['verify']);
+  p.attest();
+  const manifest = p.invoke(['finish']);
+  manifest.verification.checks = [manifest.verification.checks[0], manifest.verification.checks[0], manifest.verification.checks[0]];
+  p.write('.fluttercrew/run.json', JSON.stringify(manifest));
+  assert.equal(p.invoke(['status']).verificationStatus.valid, false);
+  assert.equal(p.invoke(['dashboard']).report.status, 'blocked');
+  assert.throws(() => p.invoke(['finish']), /all format\/analyze\/tests gates/);
+});
+
+test('gate badges use live log integrity, including a partially failed verification', (t) => {
+  const p = project(t);
+  p.start();
+  assert.throws(() => p.invoke(['verify'], (_root, name) => {
+    const log = `.fluttercrew/logs/${name}.txt`;
+    p.write(log, `Actual test-double output for ${name}`);
+    return { name, log, passed: name !== 'tests' };
+  }), /failed/);
+  let report = p.invoke(['status']);
+  assert.deepEqual(report.verificationStatus.checks.map((check) => check.status), ['passed', 'passed', 'failed']);
+  p.write('.fluttercrew/logs/format.txt', 'Changed output');
+  report = p.invoke(['dashboard']).report;
+  assert.deepEqual(report.verificationStatus.checks.map((check) => check.status), ['stale', 'passed', 'failed']);
+  const html = fs.readFileSync(path.join(p.root, '.fluttercrew/dashboard.html'), 'utf8');
+  assert.match(html, /1\/3 Passed/);
+  assert.match(html, /gate-stale">STALE/);
+  assert.match(html, /gate-fail">FAILED/);
+});
+
+test('explicit tasks validate inputs, persist notes and block finish until resolved', (t) => {
+  const p = project(t);
+  p.start();
+  for (const args of [
+    ['REQ-999', 'implementation', 'done', 'note'],
+    ['REQ-001', 'unknown', 'done', 'note'],
+    ['REQ-001', 'testing', 'skipped', 'note'],
+    ['REQ-001', 'testing', 'done', '']
+  ]) assert.throws(() => p.invoke(['task', ...args]));
+  p.invoke(['task', 'REQ-001', 'implementation', 'in_progress', 'Implementing state transitions']);
+  const report = p.invoke(['resume']);
+  assert.equal(report.taskStatus[0].notes, 'Implementing state transitions');
+  assert.equal(report.taskStatus[0].status, 'in_progress');
+  assert.ok(report.nextActions.some((action) => action.kind === 'task'));
+  p.invoke(['verify']);
+  p.attest();
+  assert.throws(() => p.invoke(['finish']), /REQ-001 implementation: in_progress/);
+  p.invoke(['task', 'REQ-001', 'implementation', 'done', 'State transitions implemented']);
+  p.invoke(['task', 'REQ-001', 'testing', 'blocked', 'Missing target access']);
+  assert.equal(p.invoke(['status']).status, 'blocked');
+  assert.throws(() => p.invoke(['finish']), /REQ-001 testing: blocked/);
+  p.invoke(['task', 'REQ-001', 'testing', 'done', 'Tests executed; see requirement evidence']);
+  assert.equal(p.invoke(['finish']).status, 'done');
+});
+
+test('completed tasks become stale after source or spec changes', (t) => {
+  const p = project(t);
+  p.start();
+  p.invoke(['task', 'REQ-001', 'implementation', 'done', 'Feature written']);
+  p.write('lib/main.dart', 'void main() { /* updated */ }');
+  assert.equal(p.invoke(['resume']).taskStatus[0].status, 'stale');
+  assert.equal(p.invoke(['resume']).taskStatus[0].recordedStatus, 'done');
+  p.invoke(['task', 'REQ-001', 'implementation', 'done', 'Feature updated']);
+  assert.equal(p.invoke(['resume']).taskStatus[0].status, 'done');
+  p.spec.requirements[0].description = 'New scope';
+  p.write('spec.json', JSON.stringify(p.spec));
+  p.write('change.md', 'Reviewed impact');
+  p.invoke(['spec', 'spec.json', 'change.md']);
+  assert.equal(p.invoke(['resume']).taskStatus[0].status, 'stale');
+});
+
+test('dashboard fails explicitly for corrupt run state, rather than pretending no run', (t) => {
+  const p = project(t);
+  p.start();
+  p.write('.fluttercrew/run.json', '{invalid');
+  assert.throws(() => p.invoke(['dashboard']), SyntaxError);
+  assert.throws(() => p.invoke(['resume']), SyntaxError);
+});
+
+test('CLI routes task and resume without reinstalling or starting a run', (t) => {
+  const p = project(t);
+  p.start();
+  const cli = path.resolve(__dirname, '../bin/cli.js');
+  const task = spawnSync(process.execPath, [cli, 'task', 'REQ-001', 'implementation', 'in_progress', 'Working on model'], {
+    cwd: p.root, encoding: 'utf8'
+  });
+  assert.equal(task.status, 0, task.stderr);
+  const resume = spawnSync(process.execPath, [cli, 'resume'], { cwd: p.root, encoding: 'utf8' });
+  assert.equal(resume.status, 0, resume.stderr);
+  assert.equal(JSON.parse(resume.stdout).taskStatus[0].status, 'in_progress');
+});
+
+test('live watcher stays alive after done and renders subsequent invalidation', async (t) => {
+  const p = project(t);
+  p.start();
+  p.invoke(['verify']);
+  p.attest();
+  p.invoke(['finish']);
+  const modulePath = (name) => JSON.stringify(path.resolve(__dirname, `../.agents/runtime/${name}`));
+  const observations = path.join(p.root, '.fluttercrew/observations.txt');
+  const child = spawn(process.execPath, ['-e', `
+    const fs = require('node:fs');
+    const { watch } = require(${modulePath('watcher')});
+    const { refreshDashboard } = require(${modulePath('report')});
+    const { createStore } = require(${modulePath('state')});
+    const root = ${JSON.stringify(p.root)};
+    watch(root, () => {
+      const report = refreshDashboard(root, createStore(root)).report;
+      fs.appendFileSync(${JSON.stringify(observations)}, report.status + '\\n');
+      return report;
+    }, { intervalMs: 20 });
+  `], { stdio: ['ignore', 'ignore', 'pipe'] });
+  let errors = '';
+  child.stderr.on('data', (chunk) => { errors += chunk; });
+  const exited = new Promise((resolve) => child.once('exit', resolve));
+  t.after(async () => { if (child.exitCode === null) child.kill('SIGTERM'); await exited; });
+  const waitFor = async (predicate) => {
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      if (fs.existsSync(observations) && predicate(fs.readFileSync(observations, 'utf8'))) return;
+      assert.equal(child.exitCode, null, errors);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    assert.fail(`Watcher did not produce expected state: ${errors}`);
+  };
+  await waitFor((text) => text.trim().split('\n').length >= 4);
+  p.write('lib/main.dart', 'void main() { /* post-DONE edit */ }');
+  await waitFor((text) => text.includes('blocked'));
+  assert.match(fs.readFileSync(path.join(p.root, '.fluttercrew/dashboard.html'), 'utf8'), /status: blocked/);
 });

@@ -5,7 +5,7 @@ const { BACKENDS } = require('../constants');
 const { hashFile, read, resolveProjectFile } = require('../fsutil');
 const { validateSpec } = require('../spec');
 const { newManifest } = require('../state');
-const { specStatus } = require('../report');
+const { specStatus, buildReport } = require('../report');
 const { archiveRun } = require('../archive');
 const { writeDashboard } = require('../dashboard');
 const { openBrowser } = require('../platform');
@@ -30,7 +30,7 @@ function start(ctx, args) {
   if (store.exists()) {
     if (flags.has('--archive')) {
       archiveRun(root, store, undefined, { keep: [requirements] });
-    } else if (store.load().status === 'done') {
+    } else if (buildReport(root, store.load()).report.status === 'done') {
       throw new Error('Previous run is completed (DONE). Run "crew.js archive [label]" to archive it, or pass --archive to auto-archive.');
     } else {
       throw new Error('Run already exists. Resume it or archive .fluttercrew first.');
@@ -39,7 +39,7 @@ function start(ctx, args) {
 
   const manifest = newManifest({ requirements, backend });
   store.save(manifest);
-  const htmlPath = writeDashboard(root, manifest);
+  const htmlPath = writeDashboard(root, buildReport(root, manifest).report);
   console.log('Run created. Follow .agents/workflows/feature-delivery.md');
   console.log(`📊 Live Dashboard: file://${path.resolve(htmlPath)}`);
   present(ctx, flags, htmlPath);
@@ -81,7 +81,7 @@ function spec(ctx, args) {
   };
   Object.assign(manifest, { schemaVersion: 2, traceability: {}, acceptance: {}, verification: null, status: 'in_progress' });
   store.save(manifest);
-  console.log('Spec baselined. Revisions invalidate ALL traces, verification and review attestations.');
+  console.log('Spec baselined. Revisions invalidate approval, tasks, ALL traces, verification and review attestations.');
   return manifest;
 }
 
@@ -89,10 +89,16 @@ function approve(ctx, args) {
   const { root, store } = ctx;
   const manifest = store.load();
   if (!manifest.spec) throw new Error('Cannot approve before spec is baselined. Run spec <spec.json> first.');
+  const spec = specStatus(root, manifest);
+  if (spec.issues.length) throw new Error(spec.issues.join('\n'));
   const [notes] = parseArgs(args).positional;
-  manifest.approved = { at: new Date().toISOString(), notes: notes || 'Developer approved requirements scope' };
+  manifest.approved = {
+    at: new Date().toISOString(), notes: notes || 'Developer approved requirements scope',
+    specRevision: manifest.spec.revision, specHash: manifest.spec.hash,
+    requirementsHash: manifest.spec.requirementsHash
+  };
   store.save(manifest);
-  writeDashboard(root, manifest);
+  writeDashboard(root, buildReport(root, manifest).report);
   console.log(`Developer approval recorded: ${manifest.approved.notes}`);
   return manifest;
 }

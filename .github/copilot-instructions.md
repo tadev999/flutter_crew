@@ -1,5 +1,16 @@
 # GitHub Copilot Custom Instructions for Flutter & Firebase/Supabase
 
+## Scope of System File Protection
+
+The immutable-system-files rules apply ONLY when this workflow is
+installed in a target Flutter application.
+
+They do NOT apply when developing or maintaining the FlutterCrew
+source repository itself. In that repository, agents may modify
+runtime code, workflows, instructions, and tests as requested.
+
+Never modify active run state or evidence directly; use runtime commands.
+
 ## 🛡️ IMMUTABLE SYSTEM FILES (Strict Protection)
 
 **NEVER modify, delete, overwrite, or refactor FlutterCrew system files** during feature implementation or user requests:

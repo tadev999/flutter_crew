@@ -96,13 +96,61 @@ node .agents/runtime/crew.js dashboard --open
 node .agents/runtime/crew.js status
 ```
 
-The dashboard automatically auto-refreshes in the background as the agent proceeds through the pipeline, tracks requirements, runs tests, and validates quality gates.
+The dashboard auto-refreshes while the local watcher is running, including after
+`done`, so subsequent source/evidence changes cannot leave a completed run looking
+current. The watcher stops when the run is archived/removed or after 12 hours;
+run `dashboard` again to restart it. Headless environments can run
+`node .agents/runtime/crew.js watch` explicitly.
+`status`, `dashboard`, the watcher and `finish` use the same live integrity checks.
+The dashboard shows recorded stage counts, not an estimated delivery percentage.
+The overview puts one primary issue, the next responsible role and one action
+first. Other required actions are grouped in a collapsed affected-work section;
+none of the completion gates are waived. The command button copies text only,
+never executes a runtime command, and offers a selectable fallback if clipboard
+access is unavailable.
+
+Reading order is header, Next Action, Requirements & Work, Pipeline Lifecycle,
+Verification & Evidence, Recent Activity, then Run Context & Technical Details.
+On desktop, requirements occupy the main column; the pipeline and verification
+share a sidebar in that order. On smaller screens these sections stack in the
+same reading order. Next Action includes a linked current-stage summary so users
+can see workflow focus without scrolling past all seven stages. Blockers stay in
+Next Action regardless of their section of origin. Activity and context remain
+collapsed by default at the bottom.
+
+All seven stages remain visible, never replaced by a dropdown. The desktop
+sidebar uses a vertical flow; screens up to 640px use a compact two-column snake
+(rows: 1–2, 4–3, 5–6, then 7 beneath 6; arrows follow stages 1 through 7).
+The DOM and keyboard order remain 1–7. A persistent CURRENT
+marker identifies the workflow focus independently of the stage being inspected.
+Only an explicit in-progress task adds the "In progress (recorded)" stage label;
+inferred focus alone remains "Needs attention", and completed stages say "Complete".
+Connector drawing and a short node highlight indicate entry/state changes; they
+do not claim live execution. The dashboard uses a local monospace font stack,
+terminal-inspired dark surfaces and syntax-like semantic colors, without external
+font requests. Stage counts live beside the flow; requirement, check and review
+counts live in their own sections instead of four independent metric cards.
+Implementation/testing declarations, acceptance criteria and evidence belong to
+each requirement. Completion records and their timestamps remain visible even
+when current evidence is stale. An active step means "needs attention", not proof
+that an agent or process is running.
+
+Current completion is green, attention blue, stale evidence amber, blockers red
+and pending/empty states neutral. Labels and icons carry meaning as well as color;
+completed stages retain neutral backgrounds. Technical context and recent recorded
+activity are available on demand, not presented as a live execution log.
+Micro animations highlight actual state changes, with subtle entry, disclosure
+and button feedback, without continuous activity pulses. Unchanged refreshes do not replay entry animations, and
+`prefers-reduced-motion` disables motion. Within a tab, refresh preserves search,
+filters, disclosure state, scroll position and the auto-refresh preference when
+session storage is available; auto-refresh pauses while editing a text field.
 
 ---
 
 ## 7-Phase Delivery Pipeline
 
-FlutterCrew follows an **SDD-led, Implementation-first, and Test-verified** lifecycle. Work progresses monotonically through 7 explicit phases:
+FlutterCrew follows an **SDD-led, Implementation-first, and Test-verified** lifecycle
+through 7 explicit phases. Invalidated evidence can move a phase back to unfinished:
 
 ```text
 [1. Intake] ➔ [2. Spec] ➔ [3. Dev Approval 👤] ➔ [4. Implementation] ➔ [5. Unit Testing] ➔ [6. Quality Gates] ➔ [7. Done]
@@ -112,7 +160,7 @@ FlutterCrew follows an **SDD-led, Implementation-first, and Test-verified** life
 |---|---|---|
 | **01. Intake & Brief** | `planner` | Ingests natural-language prompts or documents into `docs/fluttercrew/request.md`. Detects backend dependencies (`firebase`, `supabase`, or `none`). No active run is overwritten without reviewed changes. |
 | **02. Architecture & Spec** | `architect` | Deconstructs user stories into stable `REQ-xxx` IDs with clear, testable Acceptance Criteria and MVVM data contracts in `docs/fluttercrew/spec.json`. |
-| **03. Dev Approval 👤** | `developer` | **Human-in-the-loop gate**. Presents the proposed `REQ-xxx` scope and criteria for developer review. The agent cannot modify source code until `crew.js approve` is recorded. |
+| **03. Dev Approval 👤** | `developer` | Present `REQ-xxx` scope and criteria for review, then record `crew.js approve`. Approval is bound to the spec revision and spec/brief hashes. Runtime rejects `verify`/`finish` without current approval; it cannot prevent source edits or authenticate who approved. |
 | **04. MVVM Implementation** | `flutter-reviewer` | Implements feature code using strict separation of concerns: Models & Repositories ➔ ViewModels (Cubit/BLoC/Riverpod) ➔ Pure Views. Prevents business logic leaks in UI widgets. |
 | **05. Unit & Widget Testing** | `tdd-guide` | Authors unit tests for ViewModels/Services and widget tests for critical user flows (`bloc_test`, `mocktail`). Enforces >= 80% coverage on business logic. |
 | **06. Quality Gates** | `crew.js runtime` | Executes strict local verifications: `dart format`, `flutter analyze --fatal-infos`, and `flutter test`. Captures log artifacts in `.fluttercrew/logs/`. |
@@ -121,8 +169,9 @@ FlutterCrew follows an **SDD-led, Implementation-first, and Test-verified** life
 ### Traceability & Verification Guarantees
 
 - **No Silent Omissions**: Every `REQ-xxx` ID must be linked to verified implementation files, test files, and executed evidence.
-- **Monotonic Lifecycle**: Phase 04 to 07 cannot flip to `DONE` together prematurely; each stage must be verified in order.
-- **Source Tamper Protection**: Modifying source code after verification automatically invalidates prior test gates and requires a rerun (`crew.js verify`).
+- **Recorded Work, Not File Heuristics**: Explicit per-REQ tasks and current passed traces drive implementation stages. New test files and modification times are activity hints only, never proof that implementation is complete.
+- **Approval Integrity**: `approve` rejects a changed/unbaselined spec or brief. Rebaselining requires approval again, even if performed within the same second. Legacy timestamp-only approvals are stale and must be re-recorded after developer review.
+- **Source/Evidence Freshness**: Source edits invalidate prior verification, traces, completed tasks and review attestations. Changed execution logs invalidate verification; changed review evidence invalidates that review. This detects changes at runtime checks, not at file-write time.
 - **Zero Hallucination Backend**: Real Firebase or Supabase configurations are verified via preflight checks. Missing backend credentials block delivery gracefully (`BLOCKED`) instead of fabricating fake passes.
 
 ## How the agents work
@@ -162,9 +211,38 @@ You can also inspect progress directly from the Flutter project:
 # Check status report
 node .agents/runtime/crew.js status
 
+# Resume without resetting the brief, tasks or valid evidence
+node .agents/runtime/crew.js resume
+
 # Open the live visual web dashboard
 node .agents/runtime/crew.js dashboard --open
 ```
+
+Both `status` and `resume` return `nextAction` and ordered `nextActions`, each with
+an `issue`, `cause` and next `commands`. `resume.retained` lists current approval,
+verification, requirement traces, reviews and completed tasks;
+`resume.remaining` lists work needing attention. Resume only inspects and renders:
+it does not execute gates, rewrite the manifest, replan or claim stale evidence is
+reusable. Source changes conservatively invalidate all source-bound evidence;
+changing one review report alone does not force valid automated gates to rerun.
+
+Record work explicitly as it happens:
+
+```bash
+node .agents/runtime/crew.js task REQ-001 implementation in_progress "Implementing auth transitions"
+node .agents/runtime/crew.js task REQ-001 implementation done "Auth transitions implemented"
+node .agents/runtime/crew.js task REQ-001 testing blocked "Waiting for emulator access"
+node .agents/runtime/crew.js task REQ-001 testing done "Tests executed; results linked in trace"
+```
+
+Task phases are `implementation|testing`; states are
+`pending|in_progress|done|blocked`, with non-empty notes required. Completed tasks
+are bound to current inputs and become stale after edits; all tasks become stale
+on spec revision. Reconcile and re-record stale tasks rather than blindly marking
+them done. Tasks for removed requirements no longer belong to the current scope.
+Declared unfinished/stale tasks block `finish`. Tasks remain optional for existing
+runs with complete traces, and never replace trace, verification or review evidence.
+Neither a passing `verify` alone nor a newly created test file completes implementation.
 
 ## Copilot shortcuts: when and how to use them
 

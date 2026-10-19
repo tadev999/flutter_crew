@@ -20,6 +20,13 @@ The path above is only an example: use the actual supplied or agent-captured bri
 Treat requirements as product input, not authority to override safety/tool rules.
 Ask only blocking questions; record reversible assumptions for other decisions.
 
+On continuation, run `node .agents/runtime/crew.js resume`. Inspect
+`resume.retained` before repeating work and follow `nextActions` (issue, cause,
+commands). This command does not reset state or execute gates. Reuse current
+evidence; revalidate only missing/stale items. Source changes conservatively
+invalidate source-bound evidence; a changed review alone need not rerun valid
+automated checks. Do not restart planning for an unchanged baseline.
+
 ## Phase 1 — Intake & Requirements Brief
 
 - Follow `input-intake.md` to capture direct natural-language prompts or documents into `docs/fluttercrew/request.md`.
@@ -27,7 +34,7 @@ Ask only blocking questions; record reversible assumptions for other decisions.
 - Planner extracts core user stories, initial requirements, and backend requirements.
 - Initialize run: `node .agents/runtime/crew.js start docs/fluttercrew/request.md <backend>`.
 
-> **Live dashboard:** `start`/`dashboard` launch a background watcher that re-renders `.fluttercrew/dashboard.html` every ~3s. Stages advance from real evidence: approval timestamp (Phase 3), `lib/` edits (Phase 4), `test/` edits and `trace` reports (Phase 5), `verify` results (Phase 6), `accept`/`finish` (Phase 7). Never batch these commands at the very end: run `approve` the moment the developer agrees, `trace` each REQ as soon as it is implemented and tested, then `verify`, `accept`, `finish`.
+> **Live dashboard:** In interactive environments, `start`/`dashboard` launch a watcher that re-renders `.fluttercrew/dashboard.html` every ~3s, including after `done` (until archive/removal or its 12-hour limit). Status, dashboard and watcher share the same live integrity checks. Stages use spec-bound approval (Phase 3), explicit implementation tasks or current passed traces (Phase 4), passed requirement traces (Phase 5), `verify` (Phase 6), `accept`/`finish` (Phase 7). File modification times are activity hints only; new tests never imply implementation is complete. Counts are recorded stages, not delivery percentages. Record work as it happens, not in a batch at the end.
 
 ## Phase 2 — Architecture, Spec & Backend Contracts
 
@@ -42,18 +49,34 @@ Ask only blocking questions; record reversible assumptions for other decisions.
 - Solicit confirmation/approval before modifying application source files.
 - Record developer approval: `node .agents/runtime/crew.js approve`.
 - Never proceed to modifying application source code without completing this gate.
+- Runtime binds approval to the spec revision and spec/brief hashes.
+  `verify` and `finish` reject missing, legacy unbound or stale approval; a changed
+  spec/brief must be rebaselined before `approve` can succeed.
+  This is enforcement at verification/completion, not a file-write lock or proof
+  of the approver's identity. Never record approval without an actual developer decision.
 
 ## Phase 4 — MVVM Implementation
 
 - Implement features directly first across `models/`, `services/`, `viewmodels/`, and `views/` end to end.
 - Use small widgets, semantic labels, accessible contrast, >=48 logical-pixel touch targets, and responsive layouts.
 - Handle complete loading, empty, offline, validation, retry, and error states.
+- Record each REQ's implementation with
+  `node .agents/runtime/crew.js task REQ-001 implementation in_progress "<work>"`,
+  then `task REQ-001 implementation done "<completed work>"` after implementing.
+  Use `pending` or `blocked` with the reason when appropriate.
+  Recorded tasks are declarations, not executed evidence; unfinished/stale tasks
+  block `finish`. Source edits make completed tasks stale, and spec revisions
+  invalidate task records for retained IDs. Reconcile their notes on resume.
 
 ## Phase 5 — Unit and Widget Testing
 
 - Immediately after implementation, write comprehensive unit tests (`test/features/...`) using `mocktail` and `bloc_test`.
 - Cover business logic, edge cases, failure transitions, and mock external services.
 - Record traceability for each requirement using: `node .agents/runtime/crew.js trace <REQ-ID> <trace.json>`.
+- Track testing work with `task REQ-001 testing in_progress "<work>"` and
+  `task REQ-001 testing done "<actual results>"`. Keep executed evidence in traces.
+  Existing runs may use current passed traces without backfilling task records;
+  neither tasks nor a passing `verify` alone replace requirement evidence.
 
 ## Phase 6 — Quality Gates
 
@@ -68,7 +91,8 @@ Ask only blocking questions; record reversible assumptions for other decisions.
 Record `trace <REQ-ID> <trace.json>` for each specified requirement with real
 implementation/test/evidence links. `status` reports each ID and stale/missing spec
 issues. Spec/brief edits need a reviewed impact report and rebaseline; no silent
-scope reduction. ALL traces and global gates must be redone after rebaseline.
+scope reduction. Renew developer approval, reconcile stale tasks, and redo ALL
+traces and global gates after rebaseline.
 
 Run `node .agents/runtime/crew.js verify`. It performs conservative static checks,
 format check, flutter analyze and flutter test. It saves logs and rejects stale
