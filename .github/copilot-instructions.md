@@ -39,7 +39,7 @@ Follow the 7-phase delivery pipeline:
 3. **Dev Approval Gate (`developer`)**:
    - Present proposed `REQ-xxx` IDs and Acceptance Criteria to the developer for review & approval.
    - Record approval via `node .agents/runtime/crew.js approve` before modifying application source files.
-4. **MVVM Implementation (`flutter-reviewer`)**:
+4. **Implementation (`flutter-reviewer`)**:
    - Implement the feature directly using clean MVVM separation (Models, Services, ViewModels, Views).
 5. **Unit & Widget Testing (`tdd-guide`)**:
    - Write and run comprehensive Unit Tests (`test/features/...`) using `mocktail` and `bloc_test`.

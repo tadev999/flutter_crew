@@ -48,7 +48,7 @@ Follow the 7-phase delivery pipeline:
    - Record approval via `node .agents/runtime/crew.js approve` before modifying application source files.
    - Never write application code without completing this gate.
 
-4. **MVVM Implementation (`flutter-reviewer`)**:
+4. **Implementation (`flutter-reviewer`)**:
    - Implement the feature directly using clean MVVM separation:
      - **Models**: Data classes, DTOs, API/backend Services.
      - **ViewModels**: State management holding UI state and business logic.

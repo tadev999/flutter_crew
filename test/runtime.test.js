@@ -698,7 +698,7 @@ for (const [name, file, content] of [
     assert.deepEqual(watcherReport, status);
     const html = fs.readFileSync(path.join(p.root, '.fluttercrew/dashboard.html'), 'utf8');
     assert.match(html, /status: blocked/);
-    assert.match(html, /Next Action/);
+    assert.match(html, /Needs attention/);
     assert.throws(() => p.invoke(['finish']));
   });
 }

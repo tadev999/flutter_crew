@@ -20,12 +20,12 @@ test('completed actions and tasks use success styling, not the warning component
     requirementStatus: [requirement],
     taskStatus: [{ id: 'REQ-001', phase: 'implementation', status: 'done', notes: 'Completed work' }]
   });
-  for (const id of ['next-action-panel', 'requirements-panel']) {
+  for (const id of ['requirements-panel']) {
     const content = panel(html, id);
     assert.match(content, /tone-success/);
     assert.doesNotMatch(content, /warning-item|tone-warning/);
   }
-  assert.match(panel(html, 'next-action-panel'), /All clear/);
+  assert.match(html, /Complete — no work in progress/);
 });
 
 test('task colors distinguish done, ongoing, stale, blocked and pending', () => {
@@ -46,12 +46,12 @@ test('task colors distinguish done, ongoing, stale, blocked and pending', () => 
 
 test('next actions distinguish ready-to-finish, blocked and informational actions', () => {
   for (const [kind, tone] of [['finish', 'success'], ['preflight', 'danger'], ['approval', 'info'], ['spec', 'warning']]) {
-    const content = panel(generateDashboardHtml({
+    const html = generateDashboardHtml({
       nextActions: [{ kind, issue: 'Action', cause: 'Cause', commands: ['command'] }]
-    }), 'next-action-panel');
-    assert.match(content, new RegExp(`hero tone-${tone}`));
+    });
+    assert.match(html, new RegExp(`action-row tone-${tone}`));
   }
-  assert.match(panel(generateDashboardHtml({ status: 'not_started' }), 'next-action-panel'), /tone-neutral/);
+  assert.doesNotMatch(generateDashboardHtml({ status: 'not_started' }), /id="needs-attention"/);
 });
 
 test('overview moves counts into their context and uses one compact stepper', () => {
@@ -61,7 +61,7 @@ test('overview moves counts into their context and uses one compact stepper', ()
     assert.ok(html.includes(label));
   }
   assert.equal((html.match(/class="stage-card /g) || []).length, 7);
-  assert.equal((html.match(/aria-expanded="true"/g) || []).length, 1);
+  assert.doesNotMatch(html, /stage-panel-|stage-detail|selectStage|aria-expanded=/);
   assert.doesNotMatch(html, /id="recorded-tasks-panel"/);
   assert.match(html, /prefers-reduced-motion: reduce/);
   assert.match(html, /animation: none !important/);
@@ -73,7 +73,7 @@ test('overview moves counts into their context and uses one compact stepper', ()
   assert.match(html, /CURRENT marks workflow focus, not live execution/);
   assert.match(html, /@keyframes connect-stages/);
   assert.match(html, /@keyframes focus-stage/);
-  assert.doesNotMatch(html, /animation:[^;]*infinite/);
+  assert.match(html, /animation: recorded-progress 2.4s ease-in-out infinite/);
   assert.match(html, /font: 14px\/1.6 var\(--mono\)/);
 });
 
@@ -95,30 +95,31 @@ test('one primary action groups all remaining work without dropping items', () =
   assert.deepEqual(view.reusable, ['spec', 'approval']);
   assert.deepEqual(view.groups.map((group) => [group.kind, group.actions.length]), [['task', 2], ['trace', 1], ['review', 5]]);
   const html = generateDashboardHtml(report);
-  assert.equal((html.match(/class="btn btn-primary"/g) || []).length, 1);
-  assert.match(html, /Copy verify command/);
-  assert.match(html, /id="affected-work">/);
-  assert.doesNotMatch(html, /id="affected-work" open/);
-  assert.ok(html.indexOf('id="next-action-panel"') < html.indexOf('id="pipeline-panel"'));
+  assert.match(html, /Copy command/);
+  assert.match(html, /id="needs-attention"/);
+  assert.match(html, /id="remaining-work"><summary>Remaining work \(9\)/);
+  assert.doesNotMatch(html, /id="remaining-work" open/);
+  assert.ok(html.indexOf('id="work-overview"') < html.indexOf('id="pipeline-panel"'));
   for (const action of actions.slice(1)) assert.ok(html.includes(action.issue));
 });
 
-test('mobile pipeline keeps seven stages in a connected two-column snake without reordering the DOM', () => {
+test('pipeline keeps seven stages in a connected three-column snake on every screen without reordering the DOM', () => {
   const html = generateDashboardHtml({});
   const ids = [...html.matchAll(/id="step-([^"]+)"/g)].map((match) => match[1]);
   assert.deepEqual(ids, ['intake', 'spec', 'approval', 'implementation', 'testing', 'verify', 'done']);
-  assert.match(html, /\.pipeline-grid \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
-  for (const [stage, row, column] of [[1, 1, 1], [2, 1, 2], [3, 2, 2], [4, 2, 1], [5, 3, 1], [6, 3, 2], [7, 4, 2]]) {
+  assert.match(html, /\.pipeline-grid \{ display: grid; grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
+  assert.equal((html.match(/\.pipeline-grid \{/g) || []).length, 1);
+  for (const [stage, row, column] of [[1, 1, 1], [2, 1, 2], [3, 1, 3], [4, 2, 3], [5, 2, 2], [6, 2, 1], [7, 3, 1]]) {
     assert.ok(html.includes(`.pipeline-grid li:nth-child(${stage}) { grid-area: ${row} / ${column}; }`));
   }
-  assert.match(html, /nth-child\(3\) \.stage-link \{ left: auto; right: 100%;/);
+  assert.match(html, /nth-child\(4\), :nth-child\(5\)\) \.stage-link \{ left: auto; right: 100%;/);
   assert.equal((html.match(/class="stage-link"/g) || []).length, 6);
 });
 
 test('work-first reading order keeps pipeline before evidence and context last', () => {
   for (const status of ['not_started', 'in_progress', 'blocked', 'done']) {
     const html = generateDashboardHtml({ status });
-    const ids = ['next-action-panel', 'requirements-panel', 'pipeline-panel', 'verification-panel', 'recent-activity', 'run-context'];
+    const ids = ['work-overview', 'requirements-panel', 'pipeline-panel', 'verification-panel', 'recent-activity', 'run-context'];
     const positions = ids.map((id) => html.indexOf(`id="${id}"`));
     assert.ok(positions.every((position, index) => position >= 0 && (index === 0 || position > positions[index - 1])));
     assert.match(html, /class="stage-summary" href="#pipeline-panel"/);
@@ -129,6 +130,71 @@ test('work-first reading order keeps pipeline before evidence and context last',
   }
 });
 
+test('normal pending work has no attention banner but retains all actions', () => {
+  const html = generateDashboardHtml({ nextActions: [
+    { kind: 'verify', issue: 'Verify', cause: 'Source needs checking', commands: ['verify'] },
+    { kind: 'review', issue: 'Review', cause: 'Review needed', commands: ['accept'] }
+  ] });
+  assert.doesNotMatch(html, /id="needs-attention"|id="next-action-panel"/);
+  assert.match(html, /Source needs checking/);
+  assert.match(html, /id="remaining-work"><summary>Remaining work \(2\)/);
+});
+
+test('attention is conditional and never drops remaining actions or completion commands', () => {
+  for (const state of ['pending', 'in_progress', 'done']) {
+    const html = generateDashboardHtml({ taskStatus: [{ id: requirement.id, phase: 'testing', status: state }],
+      nextActions: state === 'done' ? [] : [{ kind: 'task', state, issue: 'Task', cause: 'Work', commands: ['task'] }] });
+    assert.doesNotMatch(html, /id="needs-attention"/);
+  }
+  for (const state of ['blocked', 'stale', 'failed']) {
+    const html = generateDashboardHtml({ nextActions: [{ kind: 'task', state, issue: state, cause: 'Investigate', commands: ['task'] }] });
+    assert.match(html, /id="needs-attention"/);
+    assert.match(html, /id="remaining-work"><summary>Remaining work \(1\)/);
+  }
+  const finished = generateDashboardHtml({ nextActions: [{ kind: 'finish', issue: 'Ready', commands: ['finish'] }] });
+  assert.doesNotMatch(finished, /id="needs-attention"/);
+  assert.match(finished.slice(0, finished.indexOf('</header>')), /data-command="finish"/);
+});
+
+test('current work is separate from prioritized blockers without losing canonical actions', () => {
+  const taskStatus = [
+    { id: 'REQ-001', phase: 'testing', status: 'in_progress' },
+    { id: 'REQ-002', phase: 'implementation', status: 'in_progress' },
+    { id: 'REQ-003', phase: 'implementation', status: 'blocked' }
+  ];
+  const actions = taskStatus.map(task => ({
+    kind: 'task', requirementId: task.id, phase: task.phase, state: task.status,
+    issue: `${task.id} ${task.phase}: ${task.status}`, cause: 'Recorded fixture', commands: ['task']
+  }));
+  const report = { taskStatus, nextActions: actions };
+  const view = presentation(report, derivePipeline(report));
+  assert.equal(view.currentWork.length, 2);
+  assert.equal(view.primary.requirementId, 'REQ-003');
+  assert.equal(view.groups.flatMap(group => group.actions).length, 2);
+  assert.equal(report.nextActions[0], actions[0]);
+  const html = generateDashboardHtml(report);
+  assert.match(html, /href="#req-REQ-001"/);
+  assert.ok(html.indexOf('id="current-work"') < html.indexOf('id="needs-attention"'));
+  const prerequisite = { kind: 'approval', issue: 'Approval required', commands: ['approve'] };
+  assert.equal(presentation({ ...report, nextActions: [...actions, prerequisite] }, derivePipeline(report)).primary, prerequisite);
+});
+
+test('current work handles overflow, empty, done and stale task records honestly', () => {
+  const tasks = ['REQ-001', 'REQ-002', 'REQ-003'].map(id => ({ id, phase: 'testing', status: 'in_progress' }));
+  const html = generateDashboardHtml({ taskStatus: tasks });
+  assert.match(html, /id="more-current-work"><summary>\+1 more/);
+  assert.match(generateDashboardHtml({}), /No work recorded in progress/);
+  assert.match(generateDashboardHtml({ status: 'done' }), /Complete — no work in progress/);
+  const stale = presentation({ taskStatus: [{ ...tasks[0], status: 'stale', recordedStatus: 'in_progress' }] }, { stages: [] });
+  assert.equal(stale.currentWork.length, 0);
+  const action = { kind: 'task', issue: 'REQ-001 testing: in_progress', commands: ['task'], state: 'in_progress' };
+  const view = presentation({ taskStatus: [tasks[0]], nextActions: [action] }, { stages: [] });
+  assert.equal(view.primary, null);
+  assert.equal(view.hero.title, 'Continue recorded work');
+  assert.equal(view.hero.command, null);
+  assert.equal(view.groups[0].actions[0], action);
+});
+
 test('stage labels separate completion, workflow focus and declared progress', () => {
   const pipeline = { stages: [{ id: 'approval', status: 'completed' }, { id: 'testing', status: 'active' }] };
   const report = { taskStatus: [{ id: 'REQ-001', phase: 'testing', status: 'in_progress' }] };
@@ -136,6 +202,33 @@ test('stage labels separate completion, workflow focus and declared progress', (
   assert.equal(presentation({}, pipeline).stages[1].label, 'Needs attention');
   const html = generateDashboardHtml({ status: 'done' });
   assert.doesNotMatch(html, /class="stage-focus"|data-focus="true"/);
+});
+
+test('progress indicators require recorded in-progress work, including secondary active phases', () => {
+  const report = {
+    requirementStatus: [{ ...requirement, status: 'pending' }],
+    taskStatus: [{ id: requirement.id, phase: 'testing', status: 'in_progress' }],
+    nextActions: [{ kind: 'task', state: 'in_progress', issue: 'REQ-001 testing: in_progress', cause: 'Recorded', commands: ['task'] }]
+  };
+  const html = generateDashboardHtml(report);
+  for (const key of ['current-work', 'req:REQ-001', 'task:REQ-001:testing', 'stage:testing']) {
+    assert.ok(html.includes(`data-progress-key="${key}"`));
+  }
+  assert.match(html, /TODO 1/);
+  const secondary = presentation(report, { stages: [{ id: 'testing', status: 'pending' }] });
+  assert.equal(secondary.stages[0].declaredProgress, true);
+  for (const status of ['pending', 'blocked', 'stale', 'done']) {
+    const rendered = generateDashboardHtml({ requirementStatus: [requirement],
+      taskStatus: [{ id: requirement.id, phase: 'testing', status }] });
+    assert.doesNotMatch(rendered, /data-progress-key="(?:primary-task|req:|task:|stage:)/);
+  }
+});
+
+test('current pipeline node pulses continuously without requiring entry or update classes', () => {
+  const html = generateDashboardHtml({});
+  assert.match(html, /\.stage-card\[data-focus=true\] \.stage-number \{ animation: focus-stage 2.4s var\(--ease\) infinite;/);
+  assert.match(html, /data-progress-key="focus:intake"/);
+  assert.doesNotMatch(generateDashboardHtml({ status: 'done' }), /data-progress-key="focus:/);
 });
 
 test('stale completion history stays distinct from current validity, including old saved reports', () => {
@@ -227,7 +320,7 @@ function element(extra = {}) {
       contains: (value) => classes.has(value),
       toggle: (value, enabled) => enabled ? classes.add(value) : classes.delete(value)
     },
-    addEventListener() {}, focus() {}, select() {}, setAttribute(name, value) { this[name] = value; }, matches: () => false,
+    addEventListener() {}, focus() {}, select() {}, scrollIntoView() {}, setAttribute(name, value) { this[name] = value; }, matches: () => false,
     ...extra
   };
 }
@@ -239,6 +332,9 @@ function boot({ saved = null, value = '1 / 7', reduced = false, navigation = 'na
   const intervals = new Map();
   const metric = element({ dataset: { motionKey: 'metric:stages', motionValue: value } });
   const task = element({ dataset: { motionKey: 'task:one', motionValue: 'done' } });
+  const progress = element({ dataset: { progressKey: 'task:one' } });
+  const offsets = {};
+  progress.style.setProperty = (key, value) => { offsets[key] = value; };
   const req = element({
     dataset: { id: 'REQ-001' }, textContent: 'REQ-001 counter',
     getAttribute: () => 'passed'
@@ -258,6 +354,7 @@ function boot({ saved = null, value = '1 / 7', reduced = false, navigation = 'na
     getElementById: (id) => ids[id] || null,
     querySelectorAll: (selector) => ({
       '[data-motion-key]': [metric, task], details: [req], '.req-card': [req],
+      '[data-progress-key]': [progress],
       '.filter-chip': filters, '.req-summary': [],
       '.stage-detail': stagePanels, '.stage-card[data-stage]': stageButtons
     }[selector] || [])
@@ -284,7 +381,7 @@ function boot({ saved = null, value = '1 / 7', reduced = false, navigation = 'na
     clearInterval: (id) => intervals.delete(id)
   };
   vm.runInNewContext(clientScript(), context);
-  return { context, document, window, metric, task, req, ids, filters, stageButtons, stagePanels, warnings, timeouts, intervals,
+  return { context, document, window, metric, task, offsets, req, ids, filters, stageButtons, stagePanels, warnings, timeouts, intervals,
     preferences: () => JSON.parse(stored), reloads: () => reloads };
 }
 
@@ -297,6 +394,17 @@ test('entry animation runs once; unchanged refresh does not animate; changed val
   const changed = boot({ saved: first.preferences(), navigation: 'reload', value: '2 / 7' });
   assert.equal(changed.metric.classList.contains('is-updated'), true);
   assert.equal(changed.task.classList.contains('is-updated'), false);
+});
+
+test('recorded progress retains animation phase on refresh rather than restarting', () => {
+  const page = boot();
+  const saved = page.preferences();
+  assert.ok(Number.isFinite(saved.progressStarts['task:one']));
+  saved.progressStarts['task:one'] -= 1100;
+  const next = boot({ saved });
+  assert.equal(next.preferences().progressStarts['task:one'], saved.progressStarts['task:one']);
+  assert.match(next.offsets['--progress-offset'], /^-\d+ms$/);
+  assert.notEqual(next.offsets['--progress-offset'], '-0ms');
 });
 
 test('reduced motion suppresses entry and change effects', () => {
@@ -354,18 +462,11 @@ test('auto-refresh pauses while typing and schedules only one reload at a time',
   assert.equal(page.reloads(), 1);
 });
 
-test('stage inspection exposes one panel, persists within a focus and follows a new runtime focus', () => {
-  const first = boot();
-  first.context.selectStage('verify');
-  assert.deepEqual(first.stagePanels.map((panel) => panel.hidden), [true, false]);
-  assert.deepEqual(first.stageButtons.map((button) => button['aria-expanded']), ['false', 'true']);
-  const restored = boot({ saved: first.preferences() });
-  assert.deepEqual(restored.stagePanels.map((panel) => panel.hidden), [true, false]);
-  const oldFocus = boot({ pipelineFocus: 'verify' });
-  oldFocus.context.selectStage('implementation');
-  const changedFocus = boot({ saved: oldFocus.preferences(), pipelineFocus: 'implementation' });
-  assert.deepEqual(changedFocus.stagePanels.map((panel) => panel.hidden), [false, true]);
-  assert.equal(changedFocus.preferences().inspectedStage, null);
+test('legacy stage inspection preferences do not break the overview-only pipeline', () => {
+  const page = boot({ saved: { runKey: 'run-1', inspectedStage: 'verify', pipelineFocus: 'implementation' } });
+  assert.equal(page.context.selectStage, undefined);
+  assert.equal(page.preferences().inspectedStage, undefined);
+  assert.equal(page.warnings.length, 0);
 });
 
 test('stale filtering remains selected and filters requirements after reload', () => {
@@ -436,5 +537,5 @@ test('dashboard publishes atomically and preserves the old page if publishing fa
   mock.mock.restore();
   assert.equal(fs.renameSync, rename);
   writeDashboard(root, { status: 'done' });
-  assert.match(fs.readFileSync(file, 'utf8'), /All clear/);
+  assert.match(fs.readFileSync(file, 'utf8'), /Complete — no work in progress/);
 });

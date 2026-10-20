@@ -150,7 +150,7 @@ function derivePipeline(report, signals = {}) {
       ]
     },
     {
-      id: 'implementation', number: 4, title: 'MVVM Implementation', agent: 'flutter-reviewer',
+      id: 'implementation', number: 4, title: 'Implementation', agent: 'flutter-reviewer',
       at: lib.changed > 0 ? lib.latest : null,
       desc: statuses[3] === 'completed' ? 'Implementation recorded for all requirements'
         : (approvedValid ? 'Record implementation tasks or complete requirement traces' : 'Pending approval'),

@@ -59,7 +59,26 @@ function stageState(stage, report) {
 
 function presentation(report, pipeline) {
   const actions = report.nextActions || [];
-  const primary = actions[0] || null;
+  const currentWork = (report.taskStatus || []).filter(task => task.status === 'in_progress');
+  const actionTask = action => (report.taskStatus || []).find(task =>
+    (action.requirementId === task.id && action.phase === task.phase) ||
+    action.issue?.startsWith(`${task.id} ${task.phase}:`));
+  const taskState = action => action.state || actionTask(action)?.status;
+  const attention = actions.filter(action =>
+    ['spec', 'approval', 'preflight'].includes(action.kind) ||
+    ['blocked', 'stale', 'failed'].includes(taskState(action)) ||
+    (action.kind === 'trace' && report.requirementStatus?.some(req =>
+      ['blocked', 'stale'].includes(req.status) && (action.requirementId === req.id || action.issue?.startsWith(`${req.id}:`)))) ||
+    (action.kind === 'verify' && (report.sourceChangedSinceVerification ||
+      ['failed', 'stale'].includes(report.verificationStatus?.status))) ||
+    (action.kind === 'review' && report.missingOrStaleCriteria?.some(id =>
+      report.acceptance?.[id] && action.issue?.startsWith(`${id}:`))));
+  const primary = actions.find(action => ['spec', 'approval', 'preflight'].includes(action.kind) ||
+    (action.kind === 'verify' && (report.sourceChangedSinceVerification || report.verificationStatus?.status === 'failed'))) ||
+    actions.find(action => taskState(action) === 'blocked') ||
+    actions.find(action => action.kind === 'task' && taskState(action) !== 'in_progress') ||
+    actions.find(action => action.kind !== 'task' && !(action.kind === 'trace' && currentWork.some(task =>
+      action.requirementId === task.id || action.issue?.startsWith(`${task.id}:`)))) || null;
   const sourceChanged = primary?.kind === 'verify' && report.sourceChangedSinceVerification;
   const owner = {
     spec: 'Planner', approval: 'Developer', preflight: 'Developer / delivery agent',
@@ -67,14 +86,14 @@ function presentation(report, pipeline) {
     review: 'Reviewer', finish: 'Delivery lead'
   }[primary?.kind] || (report.status === 'done' ? 'No action required' : 'Developer');
   const hero = {
-    title: sourceChanged ? 'Source changed — revalidation needed' : (primary?.issue || (report.status === 'done' ? 'All clear — delivery complete' : 'Ready to start')),
+    title: sourceChanged ? 'Source changed — revalidation needed' : (primary?.issue || (report.status === 'done' ? 'All clear — delivery complete' : (currentWork.length ? 'Continue recorded work' : 'Ready to start'))),
     cause: sourceChanged ? 'Work records are preserved. Completion is blocked until the changed inputs and affected evidence are reviewed again.'
-      : (primary?.cause || (report.status === 'done' ? 'Every requirement and required check is current. No rerun is needed.' : 'Capture a request, choose a backend and baseline the requirements.')),
+      : (primary?.cause || (report.status === 'done' ? 'Every requirement and required check is current. No rerun is needed.' : (currentWork.length ? 'Complete and review the recorded tasks before declaring them done. No live execution is inferred.' : 'Capture a request, choose a backend and baseline the requirements.'))),
     tone: actionTone(primary, report), owner, command: primary?.commands?.[0] || null,
     copyLabel: primary ? `Copy ${{ approval: 'approve', preflight: 'verify', review: 'accept' }[primary.kind] || primary.kind} command` : null
   };
   const groups = [];
-  for (const action of actions.slice(1)) {
+  for (const action of actions.filter(action => action !== primary)) {
     let group = groups.find((entry) => entry.kind === action.kind);
     if (!group) {
       group = { kind: action.kind, label: {
@@ -93,11 +112,11 @@ function presentation(report, pipeline) {
   ].filter(Boolean) : [];
   const stages = pipeline.stages.map((stage) => {
     const state = stageState(stage, report);
-    const declaredProgress = state === 'active' && report.taskStatus?.some((task) =>
+    const declaredProgress = !['stale', 'failed', 'completed'].includes(state) && report.taskStatus?.some((task) =>
       task.phase === stage.id && task.status === 'in_progress');
     const label = declaredProgress ? 'In progress (recorded)'
       : { completed: 'Complete', active: 'Needs attention', pending: 'Not reached', failed: 'Failed', stale: 'Review needed' }[state];
-    return { ...stage, state, label, tone: tone(state) };
+    return { ...stage, state, label, declaredProgress: !!declaredProgress, tone: declaredProgress ? 'info' : tone(state) };
   });
   const requirements = (report.requirementStatus || []).map((requirement) => ({
     ...requirement,
@@ -118,7 +137,7 @@ function presentation(report, pipeline) {
   for (const [id, entry] of Object.entries(report.acceptance || {})) event(entry.at, `${id} review attestation recorded`);
   for (const [id, entry] of Object.entries(report.traceability || {})) event(entry.at, `${id}: ${entry.status} trace recorded`);
   events.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
-  return { hero, groups, reusable, stages, requirements, events: events.slice(0, 10), primary };
+  return { hero, groups, reusable, stages, requirements, currentWork, attention, events: events.slice(0, 10), primary };
 }
 
 module.exports = { presentation, taskView, tone, actionTone };

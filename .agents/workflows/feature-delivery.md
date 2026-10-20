@@ -55,7 +55,7 @@ automated checks. Do not restart planning for an unchanged baseline.
   This is enforcement at verification/completion, not a file-write lock or proof
   of the approver's identity. Never record approval without an actual developer decision.
 
-## Phase 4 — MVVM Implementation
+## Phase 4 — Implementation
 
 - Implement features directly first across `models/`, `services/`, `viewmodels/`, and `views/` end to end.
 - Use small widgets, semantic labels, accessible contrast, >=48 logical-pixel touch targets, and responsive layouts.

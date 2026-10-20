@@ -176,7 +176,7 @@ test('dashboard renders stage checklists, artifact dots and gate details', () =>
     verification: { passed: false, at: iso(60), checks: [{ name: 'format', passed: true }, { name: 'analyze', passed: false, log: 'missing.txt' }] }
   });
   const html = generateDashboardHtml(report, os.tmpdir());
-  assert.ok(html.includes('stage-steps'));
+  assert.ok(!html.includes('stage-steps'));
   assert.ok(html.includes('art-dot art-on'));
   assert.ok(html.includes('gate-meta'));
 });

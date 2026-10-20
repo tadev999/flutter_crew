@@ -103,30 +103,46 @@ run `dashboard` again to restart it. Headless environments can run
 `node .agents/runtime/crew.js watch` explicitly.
 `status`, `dashboard`, the watcher and `finish` use the same live integrity checks.
 The dashboard shows recorded stage counts, not an estimated delivery percentage.
-The overview puts one primary issue, the next responsible role and one action
-first. Other required actions are grouped in a collapsed affected-work section;
-none of the completion gates are waived. The command button copies text only,
+The overview is work-first: Current Work and a linked stage summary stay visible.
+There is no permanent Next Action hero. A compact Needs attention strip appears
+only for scope/approval/prerequisite issues, blocked tasks, failed checks or stale
+evidence. Reasons and commands are available on demand, with links to the owning
+requirement, verification section or run context.
+An integrated Current Work strip lists up to two explicitly in-progress tasks,
+with additional tasks under "+N more"; links open the owning requirement and
+clear filters/search to reveal it. Empty and completed runs have explicit static
+messages. Presentation prioritizes prerequisites, blockers and remaining tasks in
+the attention strip rather than repeating an in-progress task. All canonical
+actions remain in collapsed Remaining work below the main content. Task actions
+live within each REQ; verify/review actions live with their checks and attestations;
+scope/approval actions live in Run Context. When ready, a copy-Finish command
+appears in the header. Runtime ordering and completion rules are unchanged.
+No completion gate is waived. Command buttons copy text only,
 never executes a runtime command, and offers a selectable fallback if clipboard
 access is unavailable.
 
-Reading order is header, Next Action, Requirements & Work, Pipeline Lifecycle,
+Reading order is header, Current Work (and conditional attention), Requirements & Work, Pipeline Lifecycle,
 Verification & Evidence, Recent Activity, then Run Context & Technical Details.
 On desktop, requirements occupy the main column; the pipeline and verification
 share a sidebar in that order. On smaller screens these sections stack in the
-same reading order. Next Action includes a linked current-stage summary so users
+same reading order. The overview includes a linked current-stage summary so users
 can see workflow focus without scrolling past all seven stages. Blockers stay in
-Next Action regardless of their section of origin. Activity and context remain
+Needs attention regardless of their section of origin. Activity and context remain
 collapsed by default at the bottom.
 
-All seven stages remain visible, never replaced by a dropdown. The desktop
-sidebar uses a vertical flow; screens up to 640px use a compact two-column snake
-(rows: 1–2, 4–3, 5–6, then 7 beneath 6; arrows follow stages 1 through 7).
-The DOM and keyboard order remain 1–7. A persistent CURRENT
-marker identifies the workflow focus independently of the stage being inspected.
+All seven stages remain visible, never replaced by a dropdown. Every screen size
+uses the same three-column snake (rows: 1–2–3, 6–5–4, then 7 beneath 6;
+arrows follow stages 1 through 7). Labels wrap within each card on narrow screens.
+The DOM reading order remains 1–7. Stages are non-interactive overview cards,
+without per-stage detail panels or checklists; task details live in Requirements
+& Work, checks/reviews in Verification & Evidence and history in Recent Activity.
+A persistent CURRENT marker identifies the workflow focus.
 Only an explicit in-progress task adds the "In progress (recorded)" stage label;
 inferred focus alone remains "Needs attention", and completed stages say "Complete".
-Connector drawing and a short node highlight indicate entry/state changes; they
-do not claim live execution. The dashboard uses a local monospace font stack,
+Connector drawing indicates entry/state changes. The CURRENT node pulses gently
+and continuously until focus changes or delivery completes; its phase survives
+refresh and reduced motion disables it. This marks workflow focus, not live
+execution. The dashboard uses a local monospace font stack,
 terminal-inspired dark surfaces and syntax-like semantic colors, without external
 font requests. Stage counts live beside the flow; requirement, check and review
 counts live in their own sections instead of four independent metric cards.
@@ -140,10 +156,24 @@ and pending/empty states neutral. Labels and icons carry meaning as well as colo
 completed stages retain neutral backgrounds. Technical context and recent recorded
 activity are available on demand, not presented as a live execution log.
 Micro animations highlight actual state changes, with subtle entry, disclosure
-and button feedback, without continuous activity pulses. Unchanged refreshes do not replay entry animations, and
+and button feedback. Only explicitly recorded in-progress tasks get a gentle
+animated dot on their task, requirement summary, related stage and primary task
+action. This means recorded progress, not a live process heartbeat. Pending tasks
+have static TODO labels; blocked/stale work does not animate as running.
+Progress dots preserve their phase across refreshes where session storage works.
+Unchanged refreshes do not replay entry animations, and
 `prefers-reduced-motion` disables motion. Within a tab, refresh preserves search,
 filters, disclosure state, scroll position and the auto-refresh preference when
 session storage is available; auto-refresh pauses while editing a text field.
+
+The header offers System (default), Light and Dark themes. System follows OS
+appearance changes; explicit choices override it and are saved in browser local
+storage across runs/reloads where supported. Theme initialization runs in the
+head before rendering. If storage is denied, the current page still changes theme
+and displays a persistence warning. Light and dark palettes retain the same
+layout, monospace typography and semantic labels, with tested text/control
+contrast. Theme-aware replay wrappers can reuse the shared dashboard theme module
+to synchronize their controls and saved dashboard frames.
 
 ---
 
@@ -161,7 +191,7 @@ through 7 explicit phases. Invalidated evidence can move a phase back to unfinis
 | **01. Intake & Brief** | `planner` | Ingests natural-language prompts or documents into `docs/fluttercrew/request.md`. Detects backend dependencies (`firebase`, `supabase`, or `none`). No active run is overwritten without reviewed changes. |
 | **02. Architecture & Spec** | `architect` | Deconstructs user stories into stable `REQ-xxx` IDs with clear, testable Acceptance Criteria and MVVM data contracts in `docs/fluttercrew/spec.json`. |
 | **03. Dev Approval 👤** | `developer` | Present `REQ-xxx` scope and criteria for review, then record `crew.js approve`. Approval is bound to the spec revision and spec/brief hashes. Runtime rejects `verify`/`finish` without current approval; it cannot prevent source edits or authenticate who approved. |
-| **04. MVVM Implementation** | `flutter-reviewer` | Implements feature code using strict separation of concerns: Models & Repositories ➔ ViewModels (Cubit/BLoC/Riverpod) ➔ Pure Views. Prevents business logic leaks in UI widgets. |
+| **04. Implementation** | `flutter-reviewer` | Implements feature code using strict separation of concerns: Models & Repositories ➔ ViewModels (Cubit/BLoC/Riverpod) ➔ Pure Views. Prevents business logic leaks in UI widgets. |
 | **05. Unit & Widget Testing** | `tdd-guide` | Authors unit tests for ViewModels/Services and widget tests for critical user flows (`bloc_test`, `mocktail`). Enforces >= 80% coverage on business logic. |
 | **06. Quality Gates** | `crew.js runtime` | Executes strict local verifications: `dart format`, `flutter analyze --fatal-infos`, and `flutter test`. Captures log artifacts in `.fluttercrew/logs/`. |
 | **07. Acceptance & Done** | `fleet lead` | Validates hash-anchored trace reports (`docs/fluttercrew/traces/REQ-xxx.json`) and attests 5 quality dimensions (`requirements`, `design`, `backend`, `security`, `experience`) before completing `finish`. |
@@ -183,7 +213,7 @@ flowchart TD
     Request["Your prompt or optional document"] --> Intake["01. Intake: capture request & detect backend"]
     Intake --> Spec["02. Architecture & Spec: define REQ-xxx IDs & criteria"]
     Spec --> Approval["03. Dev Approval 👤: developer reviews scope"]
-    Approval -->|Approved| Build["04. MVVM Implementation: models, viewmodels & views"]
+    Approval -->|Approved| Build["04. Implementation: models, viewmodels & views"]
     Build --> Test["05. Unit & Widget Testing: bloc_test & mocktail suites"]
     Test --> Gates["06. Quality Gates: dart format, flutter analyze & test"]
     Gates -->|Failure: fix & retry| Build

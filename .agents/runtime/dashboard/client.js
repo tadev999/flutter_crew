@@ -8,8 +8,8 @@ function clientScript() {
     let autoRefreshTimer = null;
     let reloadPending = false;
     let storageWarningShown = false;
-    let inspectedStage = null;
     let copyingCommand = false;
+    let progressStarts = {};
     const storageKey = 'fluttercrew-dashboard:' + location.pathname;
     const runKey = document.body.dataset.runKey;
     const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -44,7 +44,7 @@ function clientScript() {
           runKey, values, disclosures, filter: currentFilter, search: currentSearch,
           scrollY: window.scrollY, focusId: document.activeElement?.id,
           autoRefresh: document.getElementById('autoRefreshToggle').checked,
-          inspectedStage, pipelineFocus: document.body.dataset.currentStage
+          progressStarts
         }));
       } catch (error) { storageWarning(error); }
     }
@@ -60,6 +60,18 @@ function clientScript() {
           element.style.setProperty('--enter-delay', Math.min(index, 6) * 35 + 'ms');
           element.classList.add('is-entering');
         }
+      });
+    }
+
+    function restoreProgress(saved) {
+      const now = Date.now();
+      progressStarts = {};
+      document.querySelectorAll('[data-progress-key]').forEach(function(element) {
+        const key = element.dataset.progressKey;
+        const previous = saved?.progressStarts?.[key];
+        const start = Number.isFinite(previous) && previous <= now ? previous : now;
+        progressStarts[key] = start;
+        element.style.setProperty('--progress-offset', '-' + ((now - start) % 2400) + 'ms');
       });
     }
 
@@ -109,32 +121,27 @@ function clientScript() {
       applyFilters();
     }
 
-    function selectStage(id, userInitiated = true) {
-      const panel = document.getElementById('stage-panel-' + id);
-      if (!panel) {
-        console.warn('Unknown dashboard stage:', id);
-        return;
-      }
-      document.querySelectorAll('.stage-detail').forEach(function(entry) { entry.hidden = entry !== panel; });
-      document.querySelectorAll('.stage-card[data-stage]').forEach(function(button) {
-        button.setAttribute('aria-expanded', String(button.dataset.stage === id));
-      });
-      inspectedStage = id;
-      if (userInitiated) {
-        animateDisclosure(panel);
-        savePreferences();
-      }
+    function focusRequirementWork(id) {
+      const card = document.getElementById(id);
+      if (!card) { console.warn('Unknown requirement:', id); return; }
+      currentSearch = '';
+      document.getElementById('requirement-search').value = '';
+      const all = document.getElementById('filter-all');
+      filterReqs('all', all);
+      card.open = true;
+      card.querySelector('summary').focus({ preventScroll: true });
+      savePreferences();
     }
 
-    function openAffectedWork() {
-      const details = document.getElementById('affected-work');
-      details.open = true;
-      details.querySelector('summary').focus();
-      details.scrollIntoView({ block: 'nearest', behavior: reducedMotion.matches ? 'auto' : 'smooth' });
+    function openActionDestination(id) {
+      const destination = document.getElementById(id);
+      if (!destination) { console.warn('Unknown action destination:', id); return; }
+      if (destination.tagName === 'DETAILS') destination.open = true;
+      destination.querySelectorAll('details').forEach(function(details) { details.open = true; });
     }
 
-    async function copyPrimaryCommand() {
-      const button = document.getElementById('copy-command');
+    async function copyPrimaryCommand(button = document.getElementById('copy-command')) {
+      if (copyingCommand) return;
       const feedback = document.getElementById('copy-feedback');
       const fallback = document.getElementById('manual-copy');
       copyingCommand = true;
@@ -144,11 +151,14 @@ function clientScript() {
         if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable.');
         await navigator.clipboard.writeText(button.dataset.command);
         fallback.hidden = true;
+        button.textContent = 'Copied';
         feedback.textContent = 'Command copied. Run it in your project terminal; nothing was executed here.';
       } catch (error) {
         console.warn('Could not copy dashboard command:', error);
         fallback.hidden = false;
         const input = document.getElementById('manual-command');
+        input.value = button.dataset.command;
+        fallback.scrollIntoView({ block: 'nearest' });
         input.focus();
         input.select();
         feedback.textContent = 'Clipboard unavailable. Copy the selected command below; nothing was executed here.';
@@ -198,9 +208,6 @@ function clientScript() {
           const open = saved.disclosures?.[card.dataset.id || card.id];
           if (typeof open === 'boolean') card.open = open;
         });
-        if (saved.inspectedStage && saved.pipelineFocus === document.body.dataset.currentStage) {
-          selectStage(saved.inspectedStage, false);
-        }
         applyFilters();
         if (saved.focusId) document.getElementById(saved.focusId)?.focus({ preventScroll: true });
         if (Number.isFinite(saved.scrollY)) {
@@ -212,6 +219,7 @@ function clientScript() {
         summary.addEventListener('click', function() { animateDisclosure(summary.parentElement); });
       });
       animateChanges(saved);
+      restoreProgress(saved);
       toggleAutoRefresh(saved?.autoRefresh !== false);
       window.addEventListener('beforeunload', savePreferences);
       const timeElem = document.getElementById('lastUpdatedText');

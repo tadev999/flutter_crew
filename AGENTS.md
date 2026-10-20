@@ -136,7 +136,7 @@ Detailed skills are located in the `.agents/skills/` directory:
 [ User Review & Approval ]  <─── (Confirm requirements scope for new features)
             │
             ▼
-[ MVVM Implementation ]
+[ Implementation ]
             │  - Implement Models & Services (Firebase / Supabase)
             │  - Implement ViewModels (Cubit / Bloc / ChangeNotifier)
             │  - Implement Views (Pages & Widgets)
