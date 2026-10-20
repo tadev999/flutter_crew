@@ -123,5 +123,7 @@ test('both palettes meet 4.5:1 text contrast, 3:1 control borders and primary-bu
     for (const background of ['primary-bg', 'primary-hover']) {
       assert.ok(contrast(tokens['primary-text'], tokens[background]) >= 4.5);
     }
+    assert.ok(contrast(tokens['heading-mark-text'], tokens['heading-mark-bg']) >= 4.5,
+      'Section heading marker must preserve readable text contrast');
   }
 });

@@ -14,6 +14,55 @@ const { derivePipeline } = require('../.agents/runtime/pipeline');
 const panel = (html, id) => html.match(new RegExp(`<section[^>]*id="${id}"[\\s\\S]*?</section>`))[0];
 const requirement = { id: 'REQ-001', description: 'Counter', status: 'passed', acceptanceCriteria: ['Increment once'] };
 
+test('only the three main section headings use a text-width marker', () => {
+  const html = generateDashboardHtml({});
+  assert.equal((html.match(/class="heading-mark"/g) || []).length, 3);
+  for (const [id, label] of [['requirements-title', 'Requirements &amp; work'],
+    ['pipeline-title', 'Pipeline Lifecycle'], ['verification-title', 'Verification &amp; evidence']]) {
+    assert.ok(html.includes(`<h2 id="${id}"><span class="heading-mark">${label}</span></h2>`));
+  }
+});
+test('task progress counts scoped task slots and only current explicit completions', () => {
+  const report = {
+    requirementStatus: [requirement, { ...requirement, id: 'REQ-002' }, { ...requirement, id: 'REQ-003' }],
+    taskStatus: [
+      { id: 'REQ-001', phase: 'implementation', status: 'done' },
+      { id: 'REQ-001', phase: 'testing', status: 'in_progress' },
+      { id: 'REQ-002', phase: 'implementation', status: 'stale', recordedStatus: 'done' },
+      { id: 'REQ-002', phase: 'testing', status: 'blocked' },
+      { id: 'REQ-003', phase: 'implementation', status: 'pending' },
+      { id: 'REMOVED', phase: 'implementation', status: 'done' }
+    ]
+  };
+  const before = JSON.stringify(report);
+  assert.deepEqual(presentation(report, derivePipeline(report)).taskProgress,
+    { total: 6, done: 1, remaining: 5, stale: 1, percent: 16 });
+  assert.equal(JSON.stringify(report), before);
+  const html = generateDashboardHtml(report);
+  assert.match(html, /Total <b>6<\/b>/);
+  assert.match(html, /Done <b>1<\/b>/);
+  assert.match(html, /Remaining <b>5<\/b>/);
+  assert.match(html, /16% done/);
+  assert.match(html, /<progress max="6" value="1" aria-label="Task completion"/);
+  assert.match(html, /1 stale task\(s\) count as remaining/);
+  assert.match(html, /Task completion is not delivery approval/);
+});
+
+test('task progress handles no scope, trace-only history and all tasks done before delivery', () => {
+  const empty = presentation({}, derivePipeline({})).taskProgress;
+  assert.deepEqual(empty, { total: 0, done: 0, remaining: 0, stale: 0, percent: null });
+  assert.doesNotMatch(generateDashboardHtml({}), /<progress /);
+  assert.match(generateDashboardHtml({}), /progress is unavailable/);
+  const report = { status: 'blocked', requirementStatus: [requirement] };
+  assert.equal(presentation(report, derivePipeline(report)).taskProgress.percent, 0);
+  report.taskStatus = ['implementation', 'testing'].map(phase => ({ id: requirement.id, phase, status: 'done' }));
+  assert.deepEqual(presentation(report, derivePipeline(report)).taskProgress,
+    { total: 2, done: 2, remaining: 0, stale: 0, percent: 100 });
+  const html = generateDashboardHtml(report);
+  assert.match(html, /100% done/);
+  assert.match(html, /data-run-status="blocked"/);
+});
+
 test('completed actions and tasks use success styling, not the warning component', () => {
   const html = generateDashboardHtml({
     status: 'done', nextActions: [],

@@ -124,6 +124,16 @@ function presentation(report, pipeline) {
     actions: actions.filter((action) => action.requirementId === requirement.id ||
       (!action.requirementId && (action.issue.startsWith(`${requirement.id}:`) || action.issue.startsWith(`${requirement.id} `))))
   }));
+  const scopedTasks = requirements.flatMap(requirement =>
+    ['implementation', 'testing'].map(phase =>
+      report.taskStatus?.find(task => task.id === requirement.id && task.phase === phase)));
+  const total = scopedTasks.length;
+  const done = scopedTasks.filter(task => task?.status === 'done').length;
+  const taskProgress = {
+    total, done, remaining: total - done,
+    stale: scopedTasks.filter(task => task?.status === 'stale').length,
+    percent: total ? Math.floor(done * 100 / total) : null
+  };
   const events = [];
   const event = (at, text) => { if (at && Number.isFinite(Date.parse(at))) events.push({ at, text }); };
   event(report.startedAt, 'Request captured');
@@ -137,7 +147,7 @@ function presentation(report, pipeline) {
   for (const [id, entry] of Object.entries(report.acceptance || {})) event(entry.at, `${id} review attestation recorded`);
   for (const [id, entry] of Object.entries(report.traceability || {})) event(entry.at, `${id}: ${entry.status} trace recorded`);
   events.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
-  return { hero, groups, reusable, stages, requirements, currentWork, attention, events: events.slice(0, 10), primary };
+  return { hero, groups, reusable, stages, requirements, currentWork, attention, taskProgress, events: events.slice(0, 10), primary };
 }
 
 module.exports = { presentation, taskView, tone, actionTone };

@@ -102,8 +102,16 @@ current. The watcher stops when the run is archived/removed or after 12 hours;
 run `dashboard` again to restart it. Headless environments can run
 `node .agents/runtime/crew.js watch` explicitly.
 `status`, `dashboard`, the watcher and `finish` use the same live integrity checks.
-The dashboard shows recorded stage counts, not an estimated delivery percentage.
+The dashboard shows task totals, current explicit completions, remaining tasks
+and an integer task-completion percentage (rounded down). Each baselined REQ has
+two task slots: implementation and testing, including slots not yet recorded.
+Stale completions count as remaining; passing traces alone do not count as explicit
+task completion. Without requirements, the percentage is unavailable, not 100%.
+This is an unweighted task count, not estimated effort or delivery readiness:
+100% task completion does not waive verification, reviews or approval.
 The overview is work-first: Current Work and a linked stage summary stay visible.
+The three main section titles use a text-width yellow marker adapted to light
+and dark themes; this is a navigation accent, not a warning status.
 There is no permanent Next Action hero. A compact Needs attention strip appears
 only for scope/approval/prerequisite issues, blocked tasks, failed checks or stale
 evidence. Reasons and commands are available on demand, with links to the owning

@@ -51,6 +51,13 @@ module.exports = `
   .detail-note { margin-top: 7px; }
   .hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; border-left: 3px solid var(--tone); margin-bottom: 16px; }
   .work-overview { margin-bottom: 16px; }
+  .heading-mark { background: var(--heading-mark-bg); color: var(--heading-mark-text); padding: 1px 5px; border-radius: 3px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+  .task-progress { padding: 10px 12px; border-bottom: 1px solid var(--border-muted); }
+  .task-progress-stats { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; font-size: 12px; }
+  .task-progress-stats > strong:last-child { margin-left: auto; color: var(--accent); }
+  .task-progress progress { display: block; width: 100%; height: 6px; margin-top: 8px; accent-color: var(--accent); }
+  .task-progress p { margin-top: 6px; color: var(--text-muted); font-size: 10px; }
+  .task-progress summary { margin-top: 6px; color: var(--text-muted); font-size: 10px; }
   .work-overview > .stage-summary { padding: 6px 12px; }
   .attention-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 12px; border-top: 1px solid var(--border-muted); border-left: 3px solid var(--warning); font-size: 12px; }
   .attention-strip > strong { color: var(--warning); }

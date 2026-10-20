@@ -85,6 +85,21 @@ function generateDashboardHtml(report = {}, rootDir) {
   </header>
 
   <section class="box work-overview" id="work-overview" aria-label="Work overview">
+    <div class="task-progress" id="task-progress" aria-labelledby="task-progress-title"
+      data-motion-key="task-progress" data-motion-value="${view.taskProgress.done}/${view.taskProgress.total}:${view.taskProgress.stale}">
+      <div class="task-progress-stats">
+        <strong id="task-progress-title">Task progress</strong>
+        <span>Total <b>${view.taskProgress.total}</b></span>
+        <span>Done <b>${view.taskProgress.done}</b></span>
+        <span>Remaining <b>${view.taskProgress.remaining}</b></span>
+        <strong>${view.taskProgress.percent === null ? '—' : `${view.taskProgress.percent}%`} done</strong>
+      </div>
+      ${view.taskProgress.total ? `<progress max="${view.taskProgress.total}" value="${view.taskProgress.done}" aria-label="Task completion" aria-describedby="task-progress-note">${view.taskProgress.percent}%</progress>` : ''}
+      <details id="task-progress-context"><summary>How counted · tasks only, not delivery readiness${view.taskProgress.stale ? ` · ${view.taskProgress.stale} stale` : ''}</summary>
+        <p id="task-progress-note">${view.taskProgress.total ? '2 tasks per REQ: implementation + testing. Done counts current explicit task records only.' : 'No requirements baselined yet; task progress is unavailable.'}
+          ${view.taskProgress.stale ? `${view.taskProgress.stale} stale task(s) count as remaining.` : ''} Task completion is not delivery approval; checks and reviews still apply.</p>
+      </details>
+    </div>
     <div class="current-work" id="current-work" aria-label="Current work">
       <span class="eyebrow">Current Work · ${view.currentWork.length}</span>
       ${view.currentWork.length ? `<div class="current-work-items" data-progress-key="current-work">${view.currentWork.slice(0, 2).map(workLink).join('')}</div>
@@ -108,7 +123,7 @@ function generateDashboardHtml(report = {}, rootDir) {
 
   <main class="layout-grid">
     <section class="box" id="requirements-panel" aria-labelledby="requirements-title">
-      <div class="box-header"><div><h2 id="requirements-title">Requirements &amp; work</h2>
+      <div class="box-header"><div><h2 id="requirements-title"><span class="heading-mark">Requirements &amp; work</span></h2>
         <p class="section-meta" data-motion-key="requirements-count" data-motion-value="${passed}/${reqs.length}">${passed}/${reqs.length} requirements have current passing evidence</p>
       </div><div class="box-actions"><button class="btn btn-sm" onclick="toggleAllReqs(true)">Unfold All</button><button class="btn btn-sm" onclick="toggleAllReqs(false)">Fold All</button></div></div>
       <div class="filter-bar"><div class="filter-btn-group">${['all', 'passed', 'pending', 'stale', 'blocked'].map((filter) =>
@@ -159,7 +174,7 @@ function generateDashboardHtml(report = {}, rootDir) {
 
     <aside class="evidence-column">
       <section class="pipeline-panel" id="pipeline-panel" aria-labelledby="pipeline-title">
-        <div class="section-heading"><h2 id="pipeline-title">Pipeline Lifecycle</h2>
+        <div class="section-heading"><h2 id="pipeline-title"><span class="heading-mark">Pipeline Lifecycle</span></h2>
           <span class="section-meta" data-motion-key="stage-count" data-motion-value="${pipeline.completedStages}">${pipeline.completedStages} / 7 stages complete · not an effort estimate</span>
         </div>
         <p class="pipeline-note"><span aria-hidden="true">&gt;_</span> CURRENT marks workflow focus, not live execution.</p>
@@ -177,7 +192,7 @@ function generateDashboardHtml(report = {}, rootDir) {
           </div></li>`).join('')}</ol>
       </section>
       <section class="box" id="verification-panel" aria-labelledby="verification-title">
-        <div class="box-header"><h2 id="verification-title">Verification &amp; evidence</h2></div>
+        <div class="box-header"><h2 id="verification-title"><span class="heading-mark">Verification &amp; evidence</span></h2></div>
         <details class="evidence-group" id="checks-details">
           <summary><span><strong>Automated Checks</strong><small data-motion-key="checks-count" data-motion-value="${checksPassed}:${report.verificationStatus?.status}">${checksPassed}/3 Passed · current log integrity</small></span>
             ${badge(report.verificationStatus?.valid ? 'Current' : ({ stale: 'Recheck needed', failed: 'Failed' }[report.verificationStatus?.status] || 'Not run'), tone(report.verificationStatus?.status))}
