@@ -32,10 +32,10 @@ test('intake documents safe capture, existing-run preservation and unchanged gat
 
 test('README keeps direct-prompt onboarding and valid local documentation links', () => {
   const text = read('README.md');
-  assert.ok(text.includes('No special wording or requirements file is needed.'));
+  assert.ok(text.includes('Include `FlutterCrew` in the request'));
   assert.ok(text.includes('Firebase Auth and Firestore'));
-  assert.ok(text.includes('Google Antigravity'));
-  assert.ok(text.includes('/fluttercrew-deliver'));
+  assert.ok(text.includes('Antigravity'));
+  assert.ok(text.includes('FlutterCrew: Build a task manager'));
   assert.equal((text.match(/^```/gm) || []).length % 2, 0);
   for (const match of text.matchAll(/`\/([a-z][a-z-]*)\b[^`]*`/g)) {
     assert.ok(fs.existsSync(path.join(root, '.github/prompts', `${match[1]}.prompt.md`)),
@@ -49,7 +49,7 @@ test('README keeps direct-prompt onboarding and valid local documentation links'
 });
 
 test('delivery docs distinguish enforced approval and recorded work from file heuristics', () => {
-  for (const name of ['README.md', '.agents/workflows/feature-delivery.md',
+  for (const name of ['.agents/workflows/feature-delivery.md',
     '.agents/workflows/spec-driven-delivery.md']) {
     const text = read(name);
     assert.match(text, /spec revision/i);
@@ -58,6 +58,9 @@ test('delivery docs distinguish enforced approval and recorded work from file he
     assert.match(text, /task REQ-001 implementation in_progress/);
     assert.match(text, /activity hints/);
   }
+  const readme = read('README.md');
+  assert.match(readme, /delivery workflow/i);
+  assert.match(readme, /Spec-driven development/i);
   assert.doesNotMatch(read('README.md'), /cannot modify source code until|progresses monotonically/);
   assert.doesNotMatch(read('.agents/workflows/feature-delivery.md'), /approval timestamp \(Phase 3\)/);
 });
