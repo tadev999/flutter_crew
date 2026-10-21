@@ -32,6 +32,7 @@ test('intake documents safe capture, existing-run preservation and unchanged gat
 
 test('README keeps direct-prompt onboarding and valid local documentation links', () => {
   const text = read('README.md');
+  assert.ok(text.includes('https://raw.githubusercontent.com/tadev999/flutter_crew/main/assets/dashboard_walkthrough.webp'));
   assert.ok(text.includes('Include `FlutterCrew` in the request'));
   assert.ok(text.includes('Firebase Auth and Firestore'));
   assert.ok(text.includes('Antigravity'));

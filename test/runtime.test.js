@@ -10,7 +10,11 @@ const { validateSpec } = require('../.agents/runtime/spec');
 
 function project(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fluttercrew-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const beforeCleanup = [];
+  t.after(async () => {
+    for (const cleanup of beforeCleanup.reverse()) await cleanup();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
   const write = (name, content) => {
     const file = path.join(root, name);
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -56,7 +60,8 @@ function project(t) {
       invoke(['accept', id, `.fluttercrew/evidence/${id}.md`]);
     });
   };
-  return { root, write, invoke, calls, start, attest, trace, spec };
+  return { root, write, invoke, calls, start, attest, trace, spec,
+    beforeCleanup: (cleanup) => beforeCleanup.push(cleanup) };
 }
 
 test('creates explicit run; prevents overwrite and invalid backend', (t) => {
@@ -855,7 +860,11 @@ test('live watcher stays alive after done and renders subsequent invalidation', 
   let errors = '';
   child.stderr.on('data', (chunk) => { errors += chunk; });
   const exited = new Promise((resolve) => child.once('exit', resolve));
-  t.after(async () => { if (child.exitCode === null) child.kill('SIGTERM'); await exited; });
+  p.beforeCleanup(async () => {
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    child.kill('SIGTERM');
+    await exited;
+  });
   const waitFor = async (predicate) => {
     const deadline = Date.now() + 5000;
     while (Date.now() < deadline) {

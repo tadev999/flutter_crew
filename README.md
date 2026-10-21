@@ -53,7 +53,7 @@ FlutterCrew: Build a task manager with Firebase Auth and Firestore. Use Riverpod
 
 ## Dashboard
 
-![FlutterCrew Live Dashboard Walkthrough](assets/dashboard_walkthrough.webp)
+![FlutterCrew Live Dashboard Walkthrough](https://raw.githubusercontent.com/tadev999/flutter_crew/main/assets/dashboard_walkthrough.webp)
 
 Run these commands from the Flutter project:
 
