@@ -527,18 +527,22 @@ test('agent-captured Firebase prompt still blocks on real backend prerequisites'
 
 test('status and dashboard command generate live html dashboard', (t) => {
   const p = project(t);
-  p.start();
+  p.invoke(['start', 'requirements.md', 'none']);
   const status = p.invoke(['status']);
   const dashboardPath = path.join(p.root, '.fluttercrew', 'dashboard.html');
   assert.ok(fs.existsSync(dashboardPath));
   const html = fs.readFileSync(dashboardPath, 'utf8');
   assert.ok(html.includes('FlutterCrew Live Workflow'));
   assert.ok(html.includes('Pipeline Lifecycle'));
+  assert.ok(html.includes('id="intake-processing-card"'));
+  assert.ok(html.includes('Active Intake &amp; Spec Breakdown in Progress...'));
+  assert.ok(html.includes('Phase 1 → 2 Active'));
   
   p.write('spec.json', JSON.stringify(p.spec));
   p.invoke(['spec', 'spec.json']);
   p.invoke(['status']);
   const specHtml = fs.readFileSync(dashboardPath, 'utf8');
+  assert.ok(!specHtml.includes('id="intake-processing-card"'));
   assert.ok(specHtml.includes('REQ-001'));
   assert.ok(specHtml.includes('req-card'));
   assert.ok(specHtml.includes('Unfold All'));

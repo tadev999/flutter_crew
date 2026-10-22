@@ -6,7 +6,7 @@ const darkPalette = `
     --text-main: #e2eaf5; --text-muted: #a0aec0;
     --accent: #7dd3fc; --success: #86efac; --warning: #fcd34d; --danger: #fda4af;
     --primary-bg: #1f4268; --primary-hover: #285480; --primary-text: #ffffff;
-    --heading-mark-bg: #51451f; --heading-mark-text: #fff2bc;
+    --heading-mark-bg: #173b35; --heading-mark-text: #d8f26a;
 `;
 const lightPalette = `
     color-scheme: light;
@@ -14,7 +14,7 @@ const lightPalette = `
     --text-main: #172033; --text-muted: #475569;
     --accent: #075985; --success: #166534; --warning: #854d0e; --danger: #9f1239;
     --primary-bg: #075985; --primary-hover: #0c4a6e; --primary-text: #ffffff;
-    --heading-mark-bg: #fef0ad; --heading-mark-text: #392c0a;
+    --heading-mark-bg: #d8f26a; --heading-mark-text: #102d29;
 `;
 const themeStyles = `
   :root {${darkPalette}}

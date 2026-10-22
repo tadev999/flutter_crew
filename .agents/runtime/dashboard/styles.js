@@ -177,8 +177,21 @@ module.exports = `
   .art-on { color: var(--accent); }
   .reference-list { list-style: none; font-size: 11px; overflow-wrap: anywhere; }
   .reference-list li { margin-top: 5px; }
-  .reference-list span { color: var(--text-muted); }
   .empty-state, .req-empty-msg { padding: 20px 16px; font-size: 12px; color: var(--text-muted); }
+  .intake-processing-card { margin: 16px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); overflow: hidden; }
+  .intake-processing-header { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--border-muted); background: var(--surface-hover); }
+  .pulse-indicator { position: relative; width: 14px; height: 14px; flex-shrink: 0; }
+  .pulse-dot { position: absolute; inset: 2px; border-radius: 50%; background: var(--accent); }
+  .pulse-ring { position: absolute; inset: -2px; border-radius: 50%; border: 2px solid var(--accent); animation: pulse-ring-anim 1.8s infinite ease-out; }
+  @keyframes pulse-ring-anim { 0% { transform: scale(0.6); opacity: 0.9; } 100% { transform: scale(1.6); opacity: 0; } }
+  .intake-status-text { flex: 1; min-width: 0; }
+  .intake-status-text strong { display: block; font-size: 13px; color: var(--accent); margin-bottom: 2px; }
+  .intake-subtitle { display: block; font-size: 11px; color: var(--text-muted); }
+  .intake-brief-preview { padding: 14px 16px; border-bottom: 1px solid var(--border-muted); }
+  .intake-brief-title { margin-bottom: 8px; }
+  .intake-brief-content { font: 12px/1.5 var(--mono); color: var(--text-main); background: var(--bg); padding: 10px 12px; border-radius: 4px; border: 1px solid var(--border-muted); white-space: pre-wrap; max-height: 160px; overflow-y: auto; margin: 0; }
+  .intake-milestone-footer { display: flex; align-items: center; gap: 8px; padding: 10px 16px; font-size: 11px; color: var(--text-muted); background: var(--surface); }
+  .milestone-badge { padding: 2px 6px; border-radius: 3px; background: var(--heading-mark-bg); color: var(--heading-mark-text); font-size: 10px; font-weight: 600; flex-shrink: 0; }
   .req-empty-msg { display: none; }
   .evidence-group { border-bottom: 1px solid var(--border-muted); }
   .evidence-group > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 14px; list-style: none; }

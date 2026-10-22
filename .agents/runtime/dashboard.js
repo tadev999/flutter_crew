@@ -1,7 +1,7 @@
 'use strict';
 
 const path = require('node:path');
-const { writeFileAtomic } = require('./fsutil');
+const { writeFileAtomic, read, resolveProjectFile } = require('./fsutil');
 const { derivePipeline, scanSignals } = require('./pipeline');
 const { GATES, CRITERIA, CRITERIA_DESCRIPTIONS } = require('./constants');
 const styles = require('./dashboard/styles');
@@ -15,6 +15,13 @@ const badge = (label, state) => `<span class="status-label tone-${state}">${esc(
 const progress = (key) => `<span class="progress-indicator tone-info" data-progress-key="${esc(key)}"><span class="progress-dot" aria-hidden="true"></span>In progress · recorded</span>`;
 
 function generateDashboardHtml(report = {}, rootDir) {
+  let briefContent = '';
+  if (report.requirements && rootDir) {
+    try {
+      const fullPath = resolveProjectFile(rootDir, report.requirements);
+      briefContent = read(fullPath).trim();
+    } catch {}
+  }
   const status = report.status || 'not_started';
   const since = Math.max(Date.parse(report.approved?.at || '') || 0, Date.parse(report.spec?.at || '') || 0) - 1000;
   const pipeline = derivePipeline(report, scanSignals(rootDir, report.spec ? since : 0));
@@ -167,7 +174,29 @@ function generateDashboardHtml(report = {}, rootDir) {
               ${report.traceability?.[r.id]?.at ? `<p class="detail-note">Last trace recorded: ${esc(report.traceability[r.id].status)} ${stamp(report.traceability[r.id].at)}. Current evidence: ${esc(r.status)}.</p>` : ''}
             </details>
           </div>
-        </details>`).join('') : '<p class="empty-state">No requirements baselined yet. Capture the request and review the spec first.</p>'}
+        </details>`).join('') : ((report.requirements && !report.spec) ? `
+        <div class="intake-processing-card" id="intake-processing-card">
+          <div class="intake-processing-header">
+            <div class="pulse-indicator">
+              <span class="pulse-dot"></span>
+              <span class="pulse-ring"></span>
+            </div>
+            <div class="intake-status-text">
+              <strong>Active Intake &amp; Spec Breakdown in Progress...</strong>
+              <span class="intake-subtitle">AI agent is decomposing the captured brief into <code>REQ-xxx</code> specifications and architecture boundaries.</span>
+            </div>
+            ${badge('Phase 1 → 2 Active', 'info')}
+          </div>
+          ${briefContent ? `
+          <div class="intake-brief-preview">
+            <div class="intake-brief-title"><span class="eyebrow">Captured Request Brief · ${esc(path.basename(report.requirements))}</span></div>
+            <pre class="intake-brief-content">${esc(briefContent.length > 400 ? briefContent.slice(0, 400) + '\n...' : briefContent)}</pre>
+          </div>` : ''}
+          <div class="intake-milestone-footer">
+            <span class="milestone-badge">Next Milestone</span>
+            <span>→ <strong>Developer Approval Gate (Phase 3)</strong>: Review and approve specifications before code is generated.</span>
+          </div>
+        </div>` : '<p class="empty-state">No requirements baselined yet. Capture the request and review the spec first.</p>')}
         <p class="req-empty-msg" id="reqEmptyMsg">No requirements match this filter or search.</p>
       </div>
     </section>
