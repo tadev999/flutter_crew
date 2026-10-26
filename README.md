@@ -27,6 +27,8 @@ Raw AI assistants generate code inside a black box—deciding architecture unila
 
 > 💡 Review the scope early to catch missing requirements before implementation. Time and token savings depend on the project; no fixed reduction is guaranteed.
 
+### How it works
+
 ```text
 [1. Intake]          💬 Prompt: "FlutterCrew: Add Firebase Google Sign-In"
       ↓
@@ -175,7 +177,7 @@ guarantee that every host loads files automatically.
 
 ## Dashboard
 
-![FlutterCrew Live Dashboard Walkthrough](https://raw.githubusercontent.com/tadev999/flutter_crew/main/assets/dashboard_walkthrough.webp)
+[![Animated demo of the current dashboard: developer approval, task progress, testing, verification, completion, stale evidence after source edits, and light theme. All data is simulated.](assets/dashboard_walkthrough.webp)](assets/dashboard_walkthrough.webp)
 
 Run these commands from the Flutter project:
 
@@ -222,20 +224,7 @@ npm test
 npm run test:flutter-smoke
 ```
 
-The Node tests cover runtime invariants, installer ownership and customization
-contracts. They use fixtures and test doubles where explicitly indicated.
-The separate smoke command needs Flutter/Dart on `PATH`, creates a disposable
-Flutter application, installs the workflows, and executes the installed runtime's
-real format, analyzer and widget-test gates. It also checks stale-input detection
-and safe uninstall, and cleans up its temporary project. It does not attest a
-product review, mark a delivery DONE or test cloud connectivity.
-If network access is unavailable and the required Flutter packages are already
-cached, use `npm run test:flutter-smoke -- --offline`. Missing cached dependencies
-fail explicitly; the harness never substitutes mocked Flutter gates.
 
-CI runs Node tests on Linux/macOS/Windows and a separate real Flutter smoke job on
-Linux. Native mobile builds, every IDE host and real Firebase/Supabase access are
-not covered by that smoke job.
 
 ## License
 
