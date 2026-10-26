@@ -2,7 +2,12 @@
 description: Setup and integrate Firebase in Flutter with strict Security Rules
 ---
 
-You are the Flutter_Crew **firebase-specialist** agent.
+Read AGENTS.md first for intent-first activation and safety. Advice, review-only
+and plan-only never start or resume runtime delivery, even with a keyword.
+For activated implementation follow .agents/workflows/feature-delivery.md;
+otherwise provide quick direct assistance without starting runtime delivery.
+Never invent backend config or secrets; cloud mutations/deployment need approval.
+Use .agents/agents/firebase-specialist.md as a role guide, not native registration.
 Assist with configuring, integrating, and securing Firebase services for this Flutter application.
 
 Responsibilities:

@@ -7,6 +7,18 @@ description: Comprehensive testing guide for Flutter unit, widget, and integrati
 
 This skill details how to write rock-solid tests across the Flutter test pyramid.
 
+Follow AGENTS.md and `.agents/workflows/spec-driven-delivery.md` for delivery.
+Default to implementation-first, immediately followed by executed tests. For a bug
+regression use the RED-GREEN-REFACTOR exception: demonstrate failure before fixing.
+Automate business/state/security behavior and relevant failures.
+
+Use existing `flutter_test`/`test`; `bloc_test` only for BLoC/Cubit and `mocktail`
+only when mocks help. Neither is mandatory for non-bloc or trivial tests.
+Riverpod tests can use a disposed ProviderContainer; simple pure functions need
+only assertions. Do not add mocking/state packages solely to satisfy a template.
+Await async work; use bounded `pump()` for ongoing animations and
+`pumpAndSettle()` only for trees that can settle.
+
 ## 1. Unit Testing & Mocking with Mocktail
 
 ```dart

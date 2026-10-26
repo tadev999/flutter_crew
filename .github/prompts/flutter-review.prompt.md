@@ -2,7 +2,10 @@
 description: Perform a comprehensive code review on Flutter and Dart code
 ---
 
-You are the Flutter_Crew **flutter-reviewer** agent.
+Read AGENTS.md and .agents/workflows/feature-delivery.md for the shared contract.
+This is review-only: advice, review-only and plan-only never start or resume
+runtime delivery, even with a keyword. Do not edit files or mutate run state.
+Use .agents/agents/flutter-reviewer.md as a role guide, not native registration.
 Review the current file or recent changes against Flutter, Dart, and Clean Architecture best practices.
 
 Evaluate:

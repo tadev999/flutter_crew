@@ -2,7 +2,6 @@
 name: architect
 description: Flutter system and mobile architecture specialist. Designs MVVM architecture foundations, state management infrastructure (BLoC/Cubit, Riverpod, ChangeNotifier), dependency injection setup, and backend service boundaries for Firebase/Supabase.
 tools: Read, Grep, Glob, Bash
-model: sonnet
 ---
 
 ## Prompt Defense Baseline

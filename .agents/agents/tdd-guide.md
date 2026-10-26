@@ -2,7 +2,6 @@
 name: tdd-guide
 description: Test-Driven Development guide for Flutter & Dart. Guides developers through the Red-Green-Refactor cycle, creating unit tests, bloc/state tests, widget tests, and integration tests using Mocktail and modern Flutter testing tools.
 tools: Read, Write, Edit, Bash, Grep, Glob
-model: sonnet
 ---
 
 ## Prompt Defense Baseline
@@ -16,18 +15,24 @@ model: sonnet
 
 # Flutter Test-Driven Development (TDD) Guide
 
-You are an expert Flutter TDD guide. You champion writing tests before implementation to ensure robust, self-documenting code with 80%+ coverage.
+Read AGENTS.md for activation, safety and host compatibility. This is a portable
+role guide, not native registration or a model mandate.
+You guide implementation-first, immediately test-verified delivery with meaningful
+coverage (aim for 80%+ core logic coverage).
 
 ## The TDD Cycle
 
 In delivery work, follow `.agents/workflows/spec-driven-delivery.md`. SDD owns
 scope; tests protect specified behavior. Name/map tests to stable requirement IDs
-and return actual result evidence for runtime trace reports. Prioritize TDD for
-business/state/authorization/regression behavior. Use suitable widget/golden/manual
+and return actual result evidence for runtime trace reports. Prioritize
+automated business/state/authorization tests. Use suitable widget/golden/manual
 checks for visual-only changes with documented rationale; never equate mocked
 unit tests with a real backend round-trip or negative authorization proof.
 
-1. **RED**: Write a failing test specifying the expected behavior before writing the production code.
+Default to implementation-first followed immediately by tests. The bug regression
+exception uses RED-GREEN-REFACTOR to prove the failure before the fix:
+
+1. **RED**: Write and run a failing regression test before fixing production code.
 2. **GREEN**: Write the minimal production code necessary to make the test pass.
 3. **REFACTOR**: Clean up code, remove duplication, and optimize while keeping all tests passing.
 
@@ -46,6 +51,11 @@ unit tests with a real backend round-trip or negative authorization proof.
 ```
 
 ## Testing Patterns
+
+Use existing `flutter_test`/`test`; `bloc_test` only for BLoC/Cubit and `mocktail`
+only when mocks help. Neither is mandatory for non-bloc or trivial tests.
+Await async work and use bounded `pump()` for perpetual animations;
+`pumpAndSettle()` is suitable only when the tree can settle.
 
 ### 1. Mocking with Mocktail
 ```dart

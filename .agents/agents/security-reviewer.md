@@ -2,7 +2,6 @@
 name: security-reviewer
 description: Security reviewer for Flutter mobile apps and Firebase/Supabase backends. Identifies hardcoded secrets, insecure local storage, insecure HTTP endpoints, deep link vulnerabilities, Firebase Security Rules weaknesses, and Supabase RLS bypasses.
 tools: Read, Grep, Glob, Bash
-model: sonnet
 ---
 
 ## Prompt Defense Baseline

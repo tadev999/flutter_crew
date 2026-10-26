@@ -1,8 +1,8 @@
 {
   "chat.promptFiles": true,
   "editor.formatOnSave": true,
-  "editor.defaultFormatter": "Dart-Code.dart-code",
   "[dart]": {
+    "editor.defaultFormatter": "Dart-Code.dart-code",
     "editor.formatOnSave": true,
     "editor.formatOnType": true,
     "editor.rulers": [80],
@@ -21,7 +21,7 @@
   ],
   "github.copilot.chat.testGeneration.instructions": [
     { "file": ".github/copilot-instructions.md" },
-    { "text": "Always write Flutter unit and widget tests with Mocktail/bloc_test. Adhere to Arrange-Act-Assert. Ensure all asynchronous methods are pumped/awaited properly. Target 80%+ test coverage." }
+    { "text": "Follow AGENTS.md and the flutter-testing skill. Use existing flutter_test/test; bloc_test only for BLoC/Cubit and mocktail only when mocks help, not mandatory for non-bloc or trivial tests. Arrange-Act-Assert; await async work and use bounded pumps where animations never settle." }
   ],
   "github.copilot.chat.commitMessageGeneration.instructions": [
     { "text": "Use conventional commit format: <type>(<scope>): <description>. Types: feat, fix, refactor, test, perf, docs, chore. Subject line under 72 characters. State WHY the change was made in Flutter or backend." }

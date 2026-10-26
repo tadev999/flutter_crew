@@ -2,7 +2,6 @@
 name: flutter-reviewer
 description: Flutter and Dart code reviewer. Reviews Flutter code for widget best practices, state management patterns, Dart idioms, performance pitfalls, accessibility, and Clean Architecture violations.
 tools: Read, Grep, Glob, Bash
-model: sonnet
 ---
 
 ## Prompt Defense Baseline

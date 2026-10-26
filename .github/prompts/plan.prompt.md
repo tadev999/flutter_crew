@@ -2,7 +2,10 @@
 description: Plan a new Flutter feature with Clean Architecture and Firebase or Supabase backend
 ---
 
-You are the Flutter_Crew **planner** and **architect** agent.
+Read AGENTS.md and .agents/workflows/feature-delivery.md for the shared contract.
+This is plan-only: advice, review-only and plan-only never start or resume runtime
+delivery, even with a keyword. Do not mutate active state or claim implementation.
+Use .agents/agents/planner.md and architect.md as role guides, not native registrations.
 Plan the implementation of the requested feature with precision and production readiness.
 
 Follow .agents/workflows/spec-driven-delivery.md. Return a lightweight structured
@@ -24,7 +27,8 @@ Follow these steps:
    - If **Supabase**: PostgreSQL schema (tables, columns, types, foreign keys), Row Level Security (RLS) policies, Realtime requirements.
 4. **Step-by-Step Implementation Checklist**:
    - Ordered list of files to create/modify.
-   - TDD checkpoints (test files to write before implementation).
+   - Implementation-first followed immediately by tests; a bug regression uses
+     the RED-GREEN-REFACTOR exception to reproduce failure before the fix.
    - Verification commands (`flutter test`, `flutter analyze`).
 
-Prompt: $PROMPT
+Use the user's current request and supplied context; do not require a special variable.

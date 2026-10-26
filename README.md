@@ -7,7 +7,7 @@
 
 **Spec-driven Flutter delivery with Dashboard Runtime**
 
-FlutterCrew turns unpredictable AI coding into a deterministic engineering pipeline. Instead of letting AI blindly generate code inside a black box, FlutterCrew decomposes requests into granular requirements (`REQ-xxx`, `REQ-yyy`, `REQ-zzz`), enforces a developer approval gate before writing code, and tracks every task live on a local dashboard.
+FlutterCrew adds an observable delivery workflow to your AI assistant. It breaks implementation requests into requirements (`REQ-xxx`), asks for developer approval before implementation, and records task progress and verification evidence on a local dashboard. Instructions guide the assistant; runtime gates validate recorded state and local checks, not every editor action.
 
 ---
 
@@ -15,7 +15,7 @@ FlutterCrew turns unpredictable AI coding into a deterministic engineering pipel
 
 Raw AI assistants generate code inside a black box—deciding architecture unilaterally, silently faking missing backend configs, and triggering expensive late-stage rewrites.
 
-**FlutterCrew turns AI chaos into an observable, deterministic pipeline:**
+**FlutterCrew makes delivery progress and evidence visible:**
 
 | 🎰 Raw AI Black Box | 🛡️ The FlutterCrew Way |
 |---|---|
@@ -25,7 +25,7 @@ Raw AI assistants generate code inside a black box—deciding architecture unila
 | ❌ **No progress tracking** across dozens of files | 📊 **Live Dashboard**: Real-time browser board tracking tasks from `pending` to `done` |
 | ❌ **"Looks good to me"** code that fails in production | 🧪 **Automated Quality Gates**: Enforces `dart format`, `flutter analyze`, and unit/widget tests |
 
-> 💡 **The Pre-Flight Advantage**: Catching an architectural flaw or missing requirement during the **Spec Approval** gate saves up to **90% of token usage and debugging time** compared to late-stage refactoring.
+> 💡 Review the scope early to catch missing requirements before implementation. Time and token savings depend on the project; no fixed reduction is guaranteed.
 
 ```text
 [1. Intake]          💬 Prompt: "FlutterCrew: Add Firebase Google Sign-In"
@@ -77,15 +77,101 @@ Uninstall from the Flutter project:
 npx flutter-crew uninstall
 ```
 
-Existing files are backed up before replacement. Configuration is not merged; uninstall restores available backups.
+Preview changes before installing:
+
+```bash
+npx flutter-crew install --dry-run
+```
+
+Installation records which files it owns and keeps recovery information separately
+from delivery runs. Existing VS Code settings, tasks and extension recommendations
+are preserved rather than blindly replaced or merged. Other conflicting files are
+backed up before replacement. Review the install output and keep the installation
+record with the project until uninstall is complete.
+
+Uninstall restores tracked originals and removes only unchanged files owned by the
+installation. Team-owned files, files edited after installation, delivery evidence
+and unrelated backups are preserved. Conflicts are reported for manual review.
+For older installations without an ownership record, uninstall refuses destructive
+cleanup rather than guessing which files belong to FlutterCrew.
+
+To update an existing installation, rerun `npx flutter-crew install`: unchanged
+owned files can be updated while local edits and the original recovery backups
+are retained. A partial uninstall reports remaining conflicts; keep the ownership
+record and backups until those conflicts are resolved. Never delete backups to
+make an uninstall look successful. For legacy installations, review the old
+backups before reinstalling; a new ownership record cannot reconstruct a missing
+pre-install original.
+Privacy ignore rules and their ownership record also remain while delivery
+evidence is present. Partial/no-manifest uninstall currently exits successfully
+for compatibility; always read its retained-path notices rather than treating
+exit code zero as proof that every installed file was removed.
+
+Inspect available commands and diagnose your environment:
+
+```bash
+npx flutter-crew --help
+npx flutter-crew --version
+npx flutter-crew doctor
+```
+
+`doctor` performs local checks only. It does not deploy, connect to your backend,
+approve a spec or start a delivery run. A missing SDK or configuration is reported
+with a next step; a passing diagnosis is not evidence of backend authorization.
 
 ## Use
 
-Include `FlutterCrew` in the request to activate the full delivery workflow.
+For implementation, include `FlutterCrew` in the request to activate delivery.
+Advice, review-only and plan-only requests do not start a run, even if they mention
+the product name. A requirements file is optional.
 
 ```text
 FlutterCrew: Build a task manager with Firebase Auth and Firestore. Use Riverpod, owner-only access, and responsive layouts.
 ```
+
+Choose the amount of process appropriate to the task:
+
+| Approach | When to use | Behavior |
+|---|---|---|
+| Quick assistance | Questions, review or small direct edits without the keyword | Direct work with relevant checks; no runtime run |
+| Standard delivery | A bounded implementation request with the keyword | Compact spec and focused implementation/tests, with all delivery gates retained |
+| Full delivery | Larger, backend or multi-feature implementation with the keyword | Expanded acceptance criteria, vertical slices and review evidence |
+
+These are workflow descriptions, **not CLI profile flags**. Standard delivery does
+not bypass approval, traceability, format/analyze/test gates or applicable backend
+authorization checks. Reuse the project's existing state management and test tools;
+do not introduce BLoC, Riverpod or a mocking library merely to satisfy a template.
+
+When blocked, inspect `status` or the dashboard for the cause and next command:
+
+```bash
+npx flutter-crew status
+```
+
+Preflight checks infer backend capabilities from source and local configuration:
+Firebase Auth-only does not require Firestore resources, Firestore requires its
+rules/indexes/converters, and Storage requires its own rules. Supabase Auth-only
+does not require application-table migrations; database/RPC/Postgres realtime
+requires RLS evidence, and Storage requires policies on `storage.objects`.
+Unrecognized Supabase usage is checked conservatively as database usage.
+These are static heuristics, not a Dart/SQL parser or proof of connectivity.
+Wrappers, generated code or unusual layouts need explicit review; requirement
+coverage and negative authorization tests remain part of delivery.
+
+## IDE support
+
+| Host | Entry point | Delegation |
+|---|---|---|
+| VS Code Copilot | Root/project instructions plus `.github/agents/` and `.github/prompts/` | Native custom agents when the host exposes them |
+| Claude Code | `CLAUDE.md` referencing the shared workflow | Shared role guides can be executed sequentially; no claim of native registration |
+| Gemini / Antigravity | `GEMINI.md` referencing the shared workflow | Explicit workflow loading when not auto-discovered; sequential fallback |
+| Cursor | `.cursorrules` referencing the shared workflow | Host-dependent; sequential fallback |
+| Other tool-capable assistants | Read `AGENTS.md` and the shared workflow explicitly | Sequential role passes unless native delegation is available |
+
+`.agents/agents/` contains portable role guides, not a universal native-agent
+registration format. Discovery depends on the host/version and workspace settings.
+This repository tests customization contracts; it does not simulate each IDE or
+guarantee that every host loads files automatically.
 
 ## Dashboard
 
@@ -112,7 +198,7 @@ FlutterCrew does not replace your AI assistant—it acts as an **engineering fle
 <summary><b>Do I have to use FlutterCrew for every prompt?</b></summary>
 <br>
 
-No! FlutterCrew is **keyword-activated**. When you want rapid, ad-hoc coding or quick Q&A, interact normally without the keyword. Include `FlutterCrew` in your prompt only when you want the full delivery pipeline with specs, approval gates, and verified deliverables.
+No! Interact normally for rapid, ad-hoc coding or quick Q&A. Include `FlutterCrew` in an implementation request when you want delivery with specs, approval gates and verification evidence. Review, advice and plan-only requests remain read-only with respect to runtime runs even when they mention the keyword.
 </details>
 
 <details>
@@ -127,6 +213,29 @@ FlutterCrew natively supports **Firebase** (Auth, Firestore, Security Rules, Sto
 - [Delivery workflow](.agents/workflows/feature-delivery.md)
 - [Spec-driven development](.agents/workflows/spec-driven-delivery.md)
 - [Project instructions](AGENTS.md)
+
+## Development and validation
+
+```bash
+npm run check
+npm test
+npm run test:flutter-smoke
+```
+
+The Node tests cover runtime invariants, installer ownership and customization
+contracts. They use fixtures and test doubles where explicitly indicated.
+The separate smoke command needs Flutter/Dart on `PATH`, creates a disposable
+Flutter application, installs the workflows, and executes the installed runtime's
+real format, analyzer and widget-test gates. It also checks stale-input detection
+and safe uninstall, and cleans up its temporary project. It does not attest a
+product review, mark a delivery DONE or test cloud connectivity.
+If network access is unavailable and the required Flutter packages are already
+cached, use `npm run test:flutter-smoke -- --offline`. Missing cached dependencies
+fail explicitly; the harness never substitutes mocked Flutter gates.
+
+CI runs Node tests on Linux/macOS/Windows and a separate real Flutter smoke job on
+Linux. Native mobile builds, every IDE host and real Firebase/Supabase access are
+not covered by that smoke job.
 
 ## License
 

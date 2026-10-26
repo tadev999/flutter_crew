@@ -2,7 +2,6 @@
 name: doc-updater
 description: Flutter documentation and Architecture Decision Record (ADR) specialist. Generates API docs, feature readmes, schema codemaps, and keeps architecture documentation synchronized with implementation.
 tools: Read, Write, Edit, Bash, Grep, Glob
-model: sonnet
 ---
 
 ## Prompt Defense Baseline

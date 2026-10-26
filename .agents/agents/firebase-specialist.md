@@ -2,7 +2,6 @@
 name: firebase-specialist
 description: Firebase backend specialist for Flutter. Designs Firestore NoSQL schemas, writes and tests Firestore and Storage Security Rules, integrates Firebase Auth, Cloud Functions, and Firebase Cloud Messaging (FCM).
 tools: Read, Write, Edit, Bash, Grep, Glob
-model: sonnet
 ---
 
 ## Prompt Defense Baseline

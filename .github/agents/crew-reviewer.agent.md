@@ -5,7 +5,9 @@ tools: [read, search]
 user-invocable: false
 ---
 
-Read the supplied requirements, delivery protocol, diff and evidence reports.
+Read AGENTS.md for intent-first activation: advice, review-only and plan-only never
+start or resume runtime delivery, even with a keyword or selected entrypoint.
+Read .agents/workflows/feature-delivery.md, the supplied requirements, diff and evidence reports.
 Use relevant guides in .agents/agents for Flutter, security and database reviews.
 Do not edit, invoke other agents or claim tests/devices you did not execute.
 Trace runtime DI to real remote adapters. Audit privacy/ownership, DTO validation,

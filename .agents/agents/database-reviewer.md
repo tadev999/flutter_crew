@@ -2,7 +2,6 @@
 name: database-reviewer
 description: Database and schema reviewer for Firebase Firestore and Supabase PostgreSQL. Audits query efficiency, indexing, schema normalization, Row Level Security (RLS) rules, and Firestore security rules.
 tools: Read, Grep, Glob, Bash
-model: sonnet
 ---
 
 ## Prompt Defense Baseline

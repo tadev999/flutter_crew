@@ -5,6 +5,8 @@ tools: [read, search]
 user-invocable: false
 ---
 
+Read AGENTS.md for intent-first activation: advice, review-only and plan-only never
+start or resume runtime delivery, even with a keyword or selected entrypoint.
 Read the supplied requirements and .agents/workflows/feature-delivery.md.
 Consult .agents/agents/planner.md and architect.md for relevant guidance.
 Do not edit or run commands. Return a complete numbered acceptance matrix,

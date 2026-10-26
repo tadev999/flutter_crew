@@ -10,9 +10,14 @@ const { PATHS, LIMITS } = require('./constants');
  * and report pass/fail. Injected into commands so tests can swap in a double.
  */
 function commandCheck(root, name, executable, args) {
+  const windowsSdkTool = process.platform === 'win32' && ['flutter', 'dart'].includes(executable);
+  if (windowsSdkTool && args.some((arg) => !/^[a-zA-Z0-9_./=-]+$/.test(arg))) {
+    throw new Error('Windows SDK gate arguments must be fixed command options or project-relative source directories.');
+  }
   const result = spawnSync(executable, args, {
     cwd: root, encoding: 'utf8', timeout: LIMITS.commandTimeoutMs,
-    maxBuffer: LIMITS.commandMaxBuffer, shell: false
+    // Flutter distributes .bat SDK wrappers on Windows; gatePlan supplies fixed arguments.
+    maxBuffer: LIMITS.commandMaxBuffer, shell: windowsSdkTool
   });
   const log = `${PATHS.logsDir}/${name}.txt`;
   fs.mkdirSync(path.join(root, PATHS.logsDir), { recursive: true });

@@ -7,10 +7,18 @@ parser or a guarantee that every IDE auto-loads the workspace instructions.
 
 ## 1. Understand the input and existing run
 
+First apply AGENTS.md's intent-first activation. Advice, review-only and plan-only
+never start or resume runtime delivery, even with a FlutterCrew keyword or selected
+delivery entrypoint. Return that requested output without state mutation. Quick
+direct assistance without delivery activation needs no runtime brief or gates.
+Only activated implementation delivery proceeds with the steps below.
+
 - Inspect .fluttercrew/run.json first when present and run status.
   - If the existing run status is 'done': The previous delivery cycle is complete. Automatically archive it using `node .agents/runtime/crew.js archive` to preserve history in `docs/fluttercrew/history/` before starting a fresh run. Do not force completed runs to accumulate unrelated features via change.md.
   - If the existing run is 'in_progress': A continuation resumes that run and you must never reset it or overwrite its source brief merely to accept a new prompt; for mid-flight scope changes, follow the SDD revision protocol with change.md. If the user wants to start a distinct new task instead, archive the current run first via `node .agents/runtime/crew.js archive`.
-- If an active run is for an unrelated app/feature, archive it before starting. Do not merge projects or unrelated features silently.
+- If an active run is for an unrelated app/feature, preserve it and clarify whether
+  the user wants to switch. Only archive through the runtime after that decision,
+  before starting the distinct task. Do not merge unrelated features silently.
 - With a substantive inline request, proceed without asking for a requirements
   file. If input is only "build this" with no task/document/active context, ask what
   to build, not for a prescribed filename.

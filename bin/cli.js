@@ -1,368 +1,227 @@
 #!/usr/bin/env node
+'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const { execSync } = require('child_process');
-const readline = require('readline');
+const fs = require('node:fs');
+const path = require('node:path');
+const { execFileSync, spawnSync } = require('node:child_process');
+const readline = require('node:readline');
+const { install, uninstall, safePath } = require('./installer');
+const { COMMANDS } = require('../.agents/runtime/commands');
 
 const rootSource = path.resolve(__dirname, '..');
-const arg = process.argv[2];
+const installAgentsTo = (target, options) => install(rootSource, target, options);
+const uninstallAgentsFrom = (target, options) => uninstall(rootSource, target, options);
 
-const runtimeCommands = ['start', 'spec', 'trace', 'status', 'resume', 'task', 'verify', 'accept', 'finish', 'dashboard', 'approve', 'archive'];
-
-const itemsToCopy = [
-  '.vscode',
-  '.github',
-  '.agents',
-  '.cursorrules',
-  'AGENTS.md',
-  'GEMINI.md',
-  'CLAUDE.md'
-];
-
-function copyRecursiveSync(src, dest) {
-  if (!fs.existsSync(src)) return;
-  // This CI validates the Node distribution, not a generated Flutter app.
-  if (src === path.join(rootSource, '.github', 'workflows', 'ci.yml')) return;
-  const stats = fs.statSync(src);
-
-  if (stats.isDirectory()) {
-    if (!fs.existsSync(dest)) {
-      fs.mkdirSync(dest, { recursive: true });
-    }
-    fs.readdirSync(src).forEach((child) => {
-      copyRecursiveSync(path.join(src, child), path.join(dest, child));
-    });
-  } else {
-    if (fs.existsSync(dest)) {
-      if (fs.readFileSync(src).equals(fs.readFileSync(dest))) return;
-      const backupPath = dest + `.fluttercrew-${Date.now()}.bak`;
-      fs.copyFileSync(dest, backupPath);
-      console.log(`ℹ️  Saved backup: ${backupPath}`);
-    }
-    fs.copyFileSync(src, dest);
-  }
-}
-
-function installAgentsTo(targetDir) {
-  if (path.resolve(targetDir) === rootSource) {
-    console.log('FlutterCrew source workspace detected; installation not needed.');
+function help(command) {
+  if (COMMANDS[command]) {
+    console.log(`Usage: flutter-crew ${COMMANDS[command].usage}`);
     return;
   }
-  for (const item of itemsToCopy) {
-    const srcPath = path.join(rootSource, item);
-    const destPath = path.join(targetDir, item);
-    if (fs.existsSync(srcPath)) {
-      copyRecursiveSync(srcPath, destPath);
-      console.log(`  ✓ Installed: ${item}`);
+  console.log(`FlutterCrew — local installer and delivery CLI
+
+Usage:
+  flutter-crew install [directory] [--dry-run]
+  flutter-crew [directory] [--dry-run]   Legacy install path alias
+  flutter-crew uninstall [directory] [--dry-run]   Alias: remove
+  flutter-crew init                    Interactive scaffold; aliases: create, new
+  flutter-crew doctor [directory]      Read-only local/tool diagnostics
+  flutter-crew --help                  Show this help (no writes)
+  flutter-crew --version               Show package version (no writes)
+
+No arguments: install in a Flutter project, otherwise start interactive init.
+Existing VS Code settings/tasks/extensions are preserved, including JSONC.
+Uninstall restores only manifest-owned unchanged files; custom files, edited
+files, unrelated backups and .fluttercrew run evidence are never deleted.
+The ownership manifest is .fluttercrew-install.json, separate from run state.
+Owned .gitignore privacy rules remain while recovery files or evidence remain.
+Partial uninstall/no-manifest notices return success for compatibility, not proof
+of full removal. Review retained paths; resolve conflicts and rerun uninstall.
+Dry run validates and reports without creating files or backups.
+
+Runtime commands (run in the target project):
+${Object.values(COMMANDS).filter((entry) => !entry.hidden)
+    .map((entry) => `  flutter-crew ${entry.usage}`).join('\n')}
+
+Describe your feature directly in your IDE chat (include FlutterCrew to opt in);
+a requirements document is optional. Backend packages alone do not connect a backend.`);
+}
+
+function diagnosticTool(tool) {
+  const options = { encoding: 'utf8', timeout: 15000 };
+  // Flutter's Windows SDK exposes batch launchers, not native executables.
+  // Only fixed tool names/arguments enter cmd.exe, never project/user input.
+  if (process.platform === 'win32' && ['flutter', 'dart'].includes(tool)) {
+    return spawnSync('cmd.exe', ['/d', '/s', '/c', `${tool}.bat --version`], options);
+  }
+  return spawnSync(tool, ['--version'], options);
+}
+
+function doctor(target = '.', { execute = diagnosticTool } = {}) {
+  const root = safePath(path.resolve(target));
+  let failures = 0;
+  const issue = (message) => { failures++; console.log(`WARN: ${message}`); };
+  console.log(`FlutterCrew doctor: ${root} (local checks only; no cloud access or run state changes)`);
+  for (const tool of ['node', 'flutter', 'dart']) {
+    const result = execute(tool);
+    if (result.error || result.status !== 0) {
+      issue(`${tool} unavailable or failed. ${tool === 'node' ? 'Install Node.js 18+ and add node to PATH.' :
+        'Install the Flutter SDK and add its bin directory to PATH (includes flutter and dart).'}`);
+    } else {
+      console.log(`OK: ${tool}: ${(result.stdout || result.stderr).trim().split(/\r?\n/)[0]}`);
+      if (tool === 'node' && Number((result.stdout.match(/v(\d+)/) || [])[1]) < 18) issue('Upgrade Node.js to 18 or newer.');
     }
   }
-  const ignorePath = path.join(targetDir, '.gitignore');
-  const original = fs.existsSync(ignorePath) ? fs.readFileSync(ignorePath, 'utf8') : '';
-  const missing = ['.fluttercrew/', '*.fluttercrew-*.bak']
-    .filter((line) => !original.split(/\r?\n/).includes(line));
-  if (missing.length) {
-    if (original) fs.copyFileSync(ignorePath, ignorePath + `.fluttercrew-${Date.now()}.bak`);
-    fs.writeFileSync(ignorePath, original + (original.endsWith('\n') || !original ? '' : '\n') +
-      '\n# FlutterCrew local evidence, logs and installer backups\n' + missing.join('\n') + '\n');
-  }
-}
-
-function findLatestBackup(targetDir, relativePath) {
-  const dir = path.dirname(path.join(targetDir, relativePath));
-  if (!fs.existsSync(dir)) return null;
-  const base = path.basename(relativePath);
-  const escaped = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(`^${escaped}\\.fluttercrew-\\d+\\.bak$`);
-  const matches = fs.readdirSync(dir).filter((f) => regex.test(f)).sort();
-  if (matches.length > 0) {
-    return path.join(dir, matches[matches.length - 1]);
-  }
-  return null;
-}
-
-function restoreOrRemove(targetDir, relativePath) {
-  const filePath = path.join(targetDir, relativePath);
-  const backup = findLatestBackup(targetDir, relativePath);
-  if (backup && fs.existsSync(backup)) {
-    fs.copyFileSync(backup, filePath);
-    console.log(`  ✓ Restored ${relativePath} from backup: ${path.basename(backup)}`);
-  } else if (fs.existsSync(filePath)) {
-    fs.rmSync(filePath, { force: true });
-    console.log(`  ✓ Removed ${relativePath}`);
-  }
-}
-
-function cleanBackups(targetDir) {
-  function walkAndClean(dir) {
-    if (!fs.existsSync(dir)) return;
-    for (const file of fs.readdirSync(dir)) {
-      const full = path.join(dir, file);
-      try {
-        if (fs.statSync(full).isDirectory()) {
-          if (!['.git', 'node_modules', '.dart_tool', 'build'].includes(file)) {
-            walkAndClean(full);
-          }
-        } else if (/\.fluttercrew-\d+\.bak$/.test(file)) {
-          fs.rmSync(full, { force: true });
-        }
-      } catch { /* ignore permission errors */ }
+  const hasFile = (relative) => {
+    const full = safePath(root, relative);
+    return fs.existsSync(full) && fs.lstatSync(full).isFile();
+  };
+  if (!hasFile('pubspec.yaml')) issue('Missing pubspec.yaml. Run doctor in a Flutter project or run flutter create <name>.');
+  if (!hasFile('lib/main.dart')) issue('Missing lib/main.dart. Restore your Flutter application entry point.');
+  if (!hasFile('.agents/runtime/crew.js')) issue('Runtime not installed. Run flutter-crew install in this project.');
+  if (!hasFile('.fluttercrew-install.json')) issue('No installer ownership manifest; legacy files will not be removed automatically.');
+  if (hasFile('pubspec.yaml')) {
+    const pubspec = fs.readFileSync(path.join(root, 'pubspec.yaml'), 'utf8');
+    const backends = [];
+    if (/^\s*(firebase_core|cloud_firestore|firebase_auth|firebase_storage):/m.test(pubspec)) backends.push('firebase');
+    if (/^\s*supabase_flutter:/m.test(pubspec)) backends.push('supabase');
+    // Preflight reads these explicit configuration paths and symlink-safe trees.
+    for (const relative of ['lib', 'lib/main.dart', 'lib/firebase_options.dart', 'firebase.json',
+      'firestore.rules', 'firestore.indexes.json', 'storage.rules', 'supabase/migrations']) safePath(root, relative);
+    const { preflight } = require('../.agents/runtime/preflight');
+    const issues = new Set();
+    for (const backend of backends.length ? backends : ['none']) {
+      console.log(`Detected backend: ${backend} (capability-aware static checks).`);
+      for (const message of preflight(root, backend)) issues.add(message);
     }
+    for (const message of issues) issue(`${message} Review local application initialization/configuration and backend authorization before delivery.`);
   }
-  walkAndClean(targetDir);
+  console.log('Static presence checks do not prove backend connectivity or authorization. No secrets were displayed.');
+  if (failures) process.exitCode = 1;
+  return { issues: failures };
 }
 
-function uninstallAgentsFrom(targetDir) {
-  if (path.resolve(targetDir) === rootSource) {
-    console.log('Cannot uninstall inside FlutterCrew source workspace.');
-    return;
-  }
-  if (!fs.existsSync(targetDir)) {
-    console.error(`❌ Target directory '${targetDir}' does not exist.`);
-    process.exitCode = 1;
-    return;
-  }
-
-  console.log(`\nUninstalling FlutterCrew from: ${targetDir}...`);
-
-  // 1. Remove .agents and .fluttercrew
-  const agentsDir = path.join(targetDir, '.agents');
-  if (fs.existsSync(agentsDir)) {
-    fs.rmSync(agentsDir, { recursive: true, force: true });
-    console.log('  ✓ Removed .agents/');
-  }
-  const runtimeDir = path.join(targetDir, '.fluttercrew');
-  if (fs.existsSync(runtimeDir)) {
-    fs.rmSync(runtimeDir, { recursive: true, force: true });
-    console.log('  ✓ Removed .fluttercrew/');
-  }
-
-  // 2. Restore or remove core instruction files
-  restoreOrRemove(targetDir, 'AGENTS.md');
-  restoreOrRemove(targetDir, 'GEMINI.md');
-  restoreOrRemove(targetDir, 'CLAUDE.md');
-  restoreOrRemove(targetDir, '.cursorrules');
-
-  // 3. Remove Copilot prompts and instructions
-  const promptsDir = path.join(targetDir, '.github', 'prompts');
-  if (fs.existsSync(promptsDir)) {
-    fs.rmSync(promptsDir, { recursive: true, force: true });
-    console.log('  ✓ Removed .github/prompts/');
-  }
-  const githubAgentsDir = path.join(targetDir, '.github', 'agents');
-  if (fs.existsSync(githubAgentsDir)) {
-    fs.rmSync(githubAgentsDir, { recursive: true, force: true });
-    console.log('  ✓ Removed .github/agents/');
-  }
-  restoreOrRemove(targetDir, path.join('.github', 'copilot-instructions.md'));
-
-  // If .github is empty, clean it up
-  const githubDir = path.join(targetDir, '.github');
-  if (fs.existsSync(githubDir)) {
-    try {
-      if (fs.readdirSync(githubDir).length === 0) {
-        fs.rmdirSync(githubDir);
-      }
-    } catch { /* keep if not empty */ }
-  }
-
-  // 4. Restore VS Code settings if backup exists
-  const settingsBak = path.join(targetDir, '.vscode', 'settings.json.bak');
-  const settingsPath = path.join(targetDir, '.vscode', 'settings.json');
-  if (fs.existsSync(settingsBak)) {
-    fs.renameSync(settingsBak, settingsPath);
-    console.log('  ✓ Restored .vscode/settings.json from settings.json.bak');
-  }
-
-  // 5. Clean up .gitignore
-  const gitignorePath = path.join(targetDir, '.gitignore');
-  const gitignoreBak = findLatestBackup(targetDir, '.gitignore');
-  if (gitignoreBak && fs.existsSync(gitignoreBak)) {
-    fs.copyFileSync(gitignoreBak, gitignorePath);
-    console.log('  ✓ Restored .gitignore from backup');
-  } else if (fs.existsSync(gitignorePath)) {
-    let content = fs.readFileSync(gitignorePath, 'utf8');
-    content = content
-      .replace(/\n?# FlutterCrew local evidence[^\n]*\n\.fluttercrew\/\n\*\.fluttercrew-\*\.bak\n?/g, '')
-      .replace(/\.fluttercrew\/\r?\n?/g, '')
-      .replace(/\*\.fluttercrew-\*\.bak\r?\n?/g, '');
-    fs.writeFileSync(gitignorePath, content, 'utf8');
-    console.log('  ✓ Cleaned .gitignore entries');
-  }
-
-  // 6. Clean all remaining .fluttercrew-*.bak files
-  cleanBackups(targetDir);
-
-  console.log('\nFlutterCrew successfully uninstalled!\n');
-}
-
-function promptQuestion(rl, query, defaultVal) {
-  return new Promise((resolve) => {
-    rl.question(`${query} ${defaultVal ? `(${defaultVal}): ` : ': '}`, (answer) => {
-      resolve(answer.trim() || defaultVal);
+function promptQuestion(rl, query, defaultValue) {
+  return new Promise((resolve, reject) => {
+    const closed = () => reject(new Error('Input closed. Re-run init in an interactive terminal, or use install <directory>.'));
+    rl.once('close', closed);
+    rl.question(`${query} (${defaultValue}): `, (answer) => {
+      rl.removeListener('close', closed);
+      resolve(answer.trim() || defaultValue);
     });
   });
+}
+
+function createIfAbsent(root, relative, contents) {
+  const full = safePath(root, relative);
+  if (fs.existsSync(full)) {
+    console.log(`Preserved existing ${relative} unchanged.`);
+    return;
+  }
+  fs.writeFileSync(full, contents, { flag: 'wx' });
 }
 
 async function runInteractiveInit() {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  console.log('\n============================================================');
-  console.log('FlutterCrew — Flutter Project Scaffolder & AI Fleet Setup');
-  console.log('============================================================\n');
-
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new Error('init requires an interactive terminal. Create a project with flutter create <name>, then run flutter-crew install <directory>.');
+  }
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   try {
-    // 1. Project Name
-    let projectName = await promptQuestion(rl, '📌 Enter Project Name (snake_case)', 'my_flutter_app');
-    projectName = projectName.toLowerCase().replace(/[^a-z0-9_]/g, '_');
-
-    const projectDir = path.resolve(projectName);
+    console.log('FlutterCrew — Flutter project scaffolder');
+    const projectName = (await promptQuestion(rl, 'Project name (snake_case)', 'my_flutter_app'))
+      .toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    if (!/^[a-z][a-z0-9_]*$/.test(projectName)) throw new Error('Use a project name beginning with a letter.');
+    const projectDir = safePath(process.cwd(), projectName);
     if (fs.existsSync(projectDir)) {
-      console.log(`⚠️  Directory '${projectName}' already exists!`);
-      const overwrite = await promptQuestion(rl, 'Proceed and install inside this folder? (y/n)', 'y');
-      if (overwrite.toLowerCase() !== 'y') {
-        console.log('Aborted.');
-        rl.close();
-        return;
-      }
+      const answer = await promptQuestion(rl, 'Directory exists. Install inside it? (y/n)', 'n');
+      if (answer.toLowerCase() !== 'y') return;
     }
-
-    // 2. Platforms / OS
-    console.log('\n📱 Target Platforms:');
-    console.log('  1) Mobile only (iOS, Android)');
-    console.log('  2) Mobile & Web (iOS, Android, Web)');
-    console.log('  3) All platforms (iOS, Android, Web, macOS, Windows, Linux)');
-    const platformChoice = await promptQuestion(rl, 'Select platforms (1-3)', '1');
-    let platforms = 'ios,android';
-    if (platformChoice === '2') platforms = 'ios,android,web';
-    if (platformChoice === '3') platforms = 'ios,android,web,macos,windows,linux';
-
-    // 3. Backend Choice
-    console.log('\n⚡ Choose Backend:');
-    console.log('  1) Supabase (PostgreSQL, Row Level Security, Realtime)');
-    console.log('  2) Firebase (Firestore NoSQL, Security Rules, Firebase Auth)');
-    console.log('  3) None / Custom API');
-    const backendChoice = await promptQuestion(rl, 'Select backend (1-3)', '1');
-
-    // 4. State Management
-    console.log('\n🧠 State Management:');
-    console.log('  1) BLoC / Cubit (flutter_bloc)');
-    console.log('  2) Riverpod (flutter_riverpod)');
-    console.log('  3) Provider');
-    const stateChoice = await promptQuestion(rl, 'Select state management (1-3)', '1');
-
+    const platform = await promptQuestion(rl, 'Platforms: 1 mobile, 2 mobile/web, 3 all', '1');
+    const backend = await promptQuestion(rl, 'Backend: 1 Supabase, 2 Firebase, 3 none', '1');
+    const state = await promptQuestion(rl, 'State: 1 BLoC/Cubit, 2 Riverpod, 3 Provider', '1');
+    if (![platform, backend, state].every((value) => ['1', '2', '3'].includes(value))) {
+      throw new Error('Choose 1, 2 or 3 for platforms, backend and state management.');
+    }
     rl.close();
-
-    console.log('\n🔨 Step 1: Creating Flutter project via Flutter CLI...');
-    if (!fs.existsSync(path.join(projectDir, 'pubspec.yaml'))) {
-      execSync(`flutter create --platforms=${platforms} "${projectName}"`, {
-        stdio: 'inherit',
-      });
+    const platforms = { 1: 'ios,android', 2: 'ios,android,web', 3: 'ios,android,web,macos,windows,linux' }[platform];
+    if (!fs.existsSync(safePath(projectDir, 'pubspec.yaml'))) {
+      execFileSync('flutter', ['create', `--platforms=${platforms}`, projectName], { stdio: 'inherit' });
     }
-
-    console.log('\n📦 Step 2: Adding required production dependencies...');
     const deps = ['flutter_secure_storage', 'go_router', 'intl'];
-    const devDeps = ['mocktail', 'flutter_lints'];
-
-    if (stateChoice === '1') {
-      deps.push('flutter_bloc', 'equatable');
-      devDeps.push('bloc_test');
-    } else if (stateChoice === '2') {
-      deps.push('flutter_riverpod');
-    } else {
-      deps.push('provider');
+    const devDeps = ['flutter_lints'];
+    if (state === '1') { deps.push('flutter_bloc', 'equatable'); devDeps.push('mocktail', 'bloc_test'); }
+    else deps.push(state === '2' ? 'flutter_riverpod' : 'provider');
+    if (backend === '1') deps.push('supabase_flutter');
+    if (backend === '2') deps.push('firebase_core', 'firebase_auth', 'cloud_firestore', 'firebase_storage');
+    execFileSync('flutter', ['pub', 'add', ...deps], { cwd: projectDir, stdio: 'inherit' });
+    execFileSync('flutter', ['pub', 'add', '--dev', ...devDeps], { cwd: projectDir, stdio: 'inherit' });
+    const folders = ['lib/core/constants', 'lib/core/errors', 'lib/core/theme', 'lib/core/utils',
+      'lib/core/services', ...['models', 'services', 'viewmodels', 'views/pages', 'views/widgets']
+        .map((name) => `lib/features/home/${name}`)];
+    if (backend === '1') folders.push('supabase/migrations');
+    for (const folder of folders) fs.mkdirSync(safePath(projectDir, folder), { recursive: true });
+    if (backend === '1') {
+      createIfAbsent(projectDir, '.env.example',
+        'SUPABASE_URL=https://your-project.supabase.co\nSUPABASE_ANON_KEY=your-anon-key\n');
     }
-
-    if (backendChoice === '1') {
-      deps.push('supabase_flutter');
-    } else if (backendChoice === '2' && !fs.existsSync(path.join(projectDir, 'firestore.rules'))) {
-      deps.push('firebase_core', 'firebase_auth', 'cloud_firestore', 'firebase_storage');
+    if (backend === '2') {
+      createIfAbsent(projectDir, 'firestore.rules',
+        "rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /{document=**} {\n      allow read, write: if false;\n    }\n  }\n}\n");
     }
-
-    execSync(`flutter pub add ${deps.join(' ')}`, { cwd: projectDir, stdio: 'inherit' });
-    execSync(`flutter pub add --dev ${devDeps.join(' ')}`, { cwd: projectDir, stdio: 'inherit' });
-
-    console.log('\n🏗️  Step 3: Generating MVVM Architecture folders...');
-    const folders = [
-      'lib/core/constants',
-      'lib/core/errors',
-      'lib/core/theme',
-      'lib/core/utils',
-      'lib/core/services',
-      'lib/features/home/models',
-      'lib/features/home/services',
-      'lib/features/home/viewmodels',
-      'lib/features/home/views/pages',
-      'lib/features/home/views/widgets',
-    ];
-
-    if (backendChoice === '1') {
-      folders.push('supabase/migrations');
-      fs.mkdirSync(path.join(projectDir, 'supabase/migrations'), { recursive: true });
-      fs.writeFileSync(
-        path.join(projectDir, '.env.example'),
-        'SUPABASE_URL=https://your-project.supabase.co\nSUPABASE_ANON_KEY=your-anon-key\n'
-      );
-    } else if (backendChoice === '2') {
-      fs.writeFileSync(
-        path.join(projectDir, 'firestore.rules'),
-        `rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    // Deny by default. Replace with reviewed ownership/schema rules.\n    match /{document=**} {\n      allow read, write: if false;\n    }\n  }\n}\n`
-      );
-    }
-
-    folders.forEach((dir) => {
-      fs.mkdirSync(path.join(projectDir, dir), { recursive: true });
-    });
-
-    console.log('\nStep 4: Installing FlutterCrew AI Agent Fleet...');
     installAgentsTo(projectDir);
-
-    console.log('\n============================================================');
-    console.log(`Project '${projectName}' successfully created!`);
-    console.log('============================================================');
-    console.log(`\nNext steps:`);
-    console.log(`  1) cd "${projectName}"`);
-    console.log(`  2) code .`);
-    console.log(`  3) Open Copilot Chat / Antigravity / Claude Code and type:`);
-    console.log(`     /fluttercrew-deliver <requirements file>\n`);
-    console.log('Backend packages are installed, not connected. Complete project setup and delivery gates.');
-  } catch (err) {
-    console.error('❌ Error during setup:', err.message);
+    console.log(`Project ready. cd "${projectName}" and open your IDE.`);
+    console.log('Describe your feature directly in chat with FlutterCrew; an optional requirements document is also supported.');
+    console.log('Backend packages are installed, not connected. Complete project configuration and delivery gates.');
+  } finally {
     rl.close();
-    process.exit(1);
   }
 }
 
-// Main execution switch
-if (runtimeCommands.includes(arg)) {
-  try {
-    require('../.agents/runtime/crew.js').run(process.argv.slice(2));
-  } catch (error) {
-    console.error(error.message);
+async function main(argv = process.argv.slice(2)) {
+  const [command, ...rest] = argv;
+  if (argv.includes('--help') || command === 'help' || command === '-h') {
+    const topic = command === 'help' ? rest[0] : command;
+    if (argv.length > (command === 'help' ? 2 : command === '--help' || command === '-h' ? 1 : 2) ||
+        argv.some((value) => value.startsWith('-') && !['--help', '-h'].includes(value))) {
+      throw new Error('Invalid help arguments. Use flutter-crew --help.');
+    }
+    help(topic);
+    return;
+  }
+  if (command === '--version' || command === '-v') {
+    if (rest.length) throw new Error('--version takes no arguments.');
+    console.log(require('../package.json').version);
+    return;
+  }
+  if (Object.hasOwn(COMMANDS, command)) {
+    const allowed = command === 'start' ? ['--archive'] : command === 'dashboard' ? ['--open', '--no-open'] : [];
+    const unknown = rest.find((value) => value.startsWith('-') && !allowed.includes(value));
+    if (unknown) throw new Error(`Unknown flag: ${unknown}. Use flutter-crew ${command} --help.`);
+    return require('../.agents/runtime/crew').run(argv);
+  }
+  const unknown = argv.find((value) => value.startsWith('-') && value !== '--dry-run');
+  if (unknown) throw new Error(`Unknown flag: ${unknown}. Use flutter-crew --help.`);
+  const dryRun = argv.includes('--dry-run');
+  const positional = argv.filter((value) => value !== '--dry-run');
+  const [name, ...args] = positional;
+  if (['init', 'create', 'new'].includes(name)) {
+    if (dryRun || args.length) throw new Error('init takes no arguments and requires an interactive terminal.');
+    return runInteractiveInit();
+  }
+  if (['install', 'uninstall', 'remove', 'doctor'].includes(name)) {
+    if (args.length > 1 || (name === 'doctor' && dryRun)) throw new Error(`Invalid ${name} arguments. Use flutter-crew --help.`);
+    if (name === 'doctor') return doctor(args[0]);
+    return (name === 'install' ? installAgentsTo : uninstallAgentsFrom)(args[0] || '.', { dryRun });
+  }
+  if (positional.length > 1) throw new Error('Expected one target directory. Use flutter-crew --help.');
+  if (!name && !dryRun && !fs.existsSync(path.join(process.cwd(), 'pubspec.yaml'))) return runInteractiveInit();
+  return installAgentsTo(name || '.', { dryRun });
+}
+
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(`Error: ${error.message}`);
     process.exitCode = 1;
-  }
-} else if (arg === 'uninstall' || arg === 'remove') {
-  const targetDir = path.resolve(process.argv[3] || '.');
-  uninstallAgentsFrom(targetDir);
-} else if (arg === 'create' || arg === 'init' || arg === 'new') {
-  runInteractiveInit();
-} else {
-  const targetDir = path.resolve(arg || '.');
-  const pubspecPath = path.join(targetDir, 'pubspec.yaml');
-
-  if (!fs.existsSync(pubspecPath) && !arg) {
-    // If run in an empty directory without args, offer interactive project creation
-    console.log('\nNo Flutter project detected in current directory.');
-    console.log('Would you like to scaffold a new Flutter project?');
-    runInteractiveInit();
-  } else {
-    console.log(`\nInstalling FlutterCrew into existing project: ${targetDir}`);
-    installAgentsTo(targetDir);
-    console.log('\nFlutterCrew installed successfully!\n');
-  }
+  });
 }
 
-module.exports = { installAgentsTo, uninstallAgentsFrom };
+module.exports = { main, installAgentsTo, uninstallAgentsFrom, doctor, createIfAbsent };

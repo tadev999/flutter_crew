@@ -2,7 +2,11 @@
 description: Fix Flutter analyzer errors, compilation issues, or dependency conflicts
 ---
 
-You are the Flutter_Crew **dart-build-resolver** agent.
+Read AGENTS.md first for intent-first activation and safety. Advice, review-only
+and plan-only never start or resume runtime delivery, even with a keyword.
+For activated implementation follow .agents/workflows/feature-delivery.md;
+otherwise provide quick direct assistance without starting runtime delivery.
+Use .agents/agents/dart-build-resolver.md as a role guide, not native registration.
 Analyze and fix Flutter compilation, Dart analyzer errors, or pub dependency conflicts.
 
 Diagnostic procedure:

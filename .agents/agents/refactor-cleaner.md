@@ -2,7 +2,6 @@
 name: refactor-cleaner
 description: Flutter & Dart refactoring and cleanup specialist. Simplifies bloated widgets, removes dead code and unused imports, enforces Effective Dart style guidelines, and modularizes codebase architecture.
 tools: Read, Write, Edit, Bash, Grep, Glob
-model: sonnet
 ---
 
 ## Prompt Defense Baseline

@@ -1,6 +1,6 @@
-# Spec-driven delivery, TDD-backed
+# Spec-driven delivery, implementation-first and test-verified
 
-Use SDD to define scope and completion; TDD to protect behavior; integration tests
+Use SDD to define scope and completion; tests to protect behavior; integration tests
 to prove real system interactions. This protocol extends feature-delivery.md.
 Do not add extra agents merely to produce more documents.
 
@@ -44,8 +44,12 @@ references really map to the brief; file existence alone is not coverage.
 
 ## 3. Implement and trace each requirement
 
-Plan tasks by requirement ID and vertical slice, then implement with selective TDD:
-business logic/state/security/regression => failing test, implementation, refactor.
+Plan tasks by requirement ID and vertical slice. Default to implementation-first,
+immediately followed by executed unit/state/widget tests. For a bug regression,
+use the RED-GREEN-REFACTOR exception: reproduce failure, fix, then refactor.
+Business logic/state/security always need automated tests, not necessarily a
+tests-first ceremony. Use `bloc_test` only for BLoC/Cubit and `mocktail` only when
+mocks help; existing test tools suffice for non-bloc or trivial tests.
 Use widget/golden/integration tests where appropriate. Do not force TDD ceremony
 for every color/spacing change; do not use manual verification to evade logic tests.
 
@@ -55,8 +59,11 @@ Use phases `implementation|testing` and states `pending|in_progress|done|blocked
 with explanatory notes. Mark done only after doing the work; declarations never
 replace executed evidence. File mtimes/new tests are only activity hints.
 
-Write one JSON trace report per ID using .agents/templates/trace.example.json.
-Run `node .agents/runtime/crew.js trace REQ-001 .fluttercrew/traces/REQ-001.json`.
+Author a new project-relative JSON trace report per ID using
+.agents/templates/trace.example.json, for example `docs/fluttercrew/REQ-001-trace.json`.
+Run `node .agents/runtime/crew.js trace REQ-001 docs/fluttercrew/REQ-001-trace.json`.
+Use a new report filename for revised evidence; never hand-edit active state or
+already recorded trace/evidence files. Runtime commands manage their registration.
 Statuses are pending, blocked or passed; skipped/waived is not completion.
 The runtime also computes stale when a recorded trace or its inputs/evidence no
 longer match; refresh the actual review/results and re-record that ID to clear it.
@@ -103,8 +110,8 @@ remaining work. It does not clear state or rerun checks. Follow `nextActions` an
 reuse current evidence instead of repeating planning or verification unnecessarily.
 Independently check the brief-to-spec completeness, then ID-to-code/test/evidence
 coverage. A generic backend report cannot substitute for an omitted requirement.
-Run verify and review current traces, register the five global attestations, then
-finish. Finish requires EVERY specified ID passed with current, unchanged files
+Run `verify` and review current traces, register the five global attestations with
+`accept`, then `finish`. Finish requires EVERY specified ID passed with current, unchanged files
 in addition to the existing mechanical/backend/global gates.
 DONE is local delivery status, not production certification or proof of perfect
 coverage. Never alter scope, lower tests or falsify evidence to make gates pass.

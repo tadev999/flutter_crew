@@ -2,7 +2,6 @@
 name: supabase-specialist
 description: Supabase and PostgreSQL backend specialist for Flutter. Designs relational schemas, writes and optimizes Row Level Security (RLS) policies, indexes, stored procedures (RPC), Supabase Auth, and Realtime streams.
 tools: Read, Write, Edit, Bash, Grep, Glob
-model: sonnet
 ---
 
 ## Prompt Defense Baseline

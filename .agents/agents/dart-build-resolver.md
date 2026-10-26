@@ -2,7 +2,6 @@
 name: dart-build-resolver
 description: Dart and Flutter build error, compilation failure, and pub dependency resolver. Resolves flutter analyze errors, build_runner code generation failures, and platform build issues with minimal surgical changes.
 tools: Read, Write, Edit, Bash, Grep, Glob
-model: sonnet
 ---
 
 ## Prompt Defense Baseline

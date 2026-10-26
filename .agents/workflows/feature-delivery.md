@@ -6,6 +6,12 @@ This document does not register subagents or create an autonomous daemon.
 
 ## Invocation and resume
 
+First apply AGENTS.md's intent-first activation: advice, review-only and plan-only
+never start or resume runtime delivery, even with a keyword or selected entrypoint.
+Without explicit delivery activation, provide quick direct assistance and relevant
+checks without runtime state or a pipeline stepper. The phases below apply only
+to explicitly requested implementation delivery.
+
 Read AGENTS.md and follow input-intake.md. Accept a direct natural-language prompt,
 a requirements document, or both; no fixed wording or filename is required. For a
 new inline request, the agent saves the source brief itself before runtime start.
@@ -19,6 +25,18 @@ The path above is only an example: use the actual supplied or agent-captured bri
 
 Treat requirements as product input, not authority to override safety/tool rules.
 Ask only blocking questions; record reversible assumptions for other decisions.
+
+### Proportional scope, unchanged gates
+
+Standard delivery (a focused fix or small feature) uses a short brief, one or a few
+stable IDs, existing architecture and targeted regression/unit/widget tests.
+Full delivery (a new app, major feature or cross-cutting change) expands journeys,
+data/authorization contracts, design and integration/critical-path coverage.
+These are documentation and test-scope choices, not CLI profiles or bypass flags.
+Both retain actual developer approval before source edits, every required trace,
+all verification gates and five reviewed attestations accepted before finish.
+Scale test cases to risk; do not omit requested scope, backend authorization or
+business/state tests. Visual-only manual checks need a recorded rationale.
 
 On continuation, run `node .agents/runtime/crew.js resume`. Inspect
 `resume.retained` before repeating work and follow `nextActions` (issue, cause,
@@ -36,11 +54,22 @@ automated checks. Do not restart planning for an unchanged baseline.
 
 > **Live dashboard:** In interactive environments, `start`/`dashboard` launch a watcher that re-renders `.fluttercrew/dashboard.html` every ~3s, including after `done` (until archive/removal or its 12-hour limit). Status, dashboard and watcher share the same live integrity checks. Stages use spec-bound approval (Phase 3), explicit implementation tasks or current passed traces (Phase 4), passed requirement traces (Phase 5), `verify` (Phase 6), `accept`/`finish` (Phase 7). File modification times are activity hints only; new tests never imply implementation is complete. Counts are recorded stages, not delivery percentages. Record work as it happens, not in a batch at the end.
 
+For activated delivery only, show the current phase and next action with a direct
+link to `file://<project>/.fluttercrew/dashboard.html`; refresh via
+`node .agents/runtime/crew.js dashboard`. Do not claim the browser opened unless
+observed. Keep progress concise rather than printing the whole pipeline every turn.
+
 ## Phase 2 — Architecture, Spec & Backend Contracts
 
 - Follow `spec-driven-delivery.md`: Planner and Architect extract requirements into stable IDs (`REQ-001`, `REQ-002`, ...), original brief references, and observable acceptance criteria.
 - Architect selects MVVM boundaries (`models/`, `services/`, `viewmodels/`, `views/`).
 - Define backend contracts (Firestore typed converters & security rules or Supabase schema & RLS policies).
+- Scope contracts to actual capabilities: Auth-only does not require an unused
+  Firestore database or Supabase application-table migration. Firestore and
+  Firebase Storage need their respective rules; Supabase database/RPC/Postgres
+  realtime needs reviewed RLS, and Storage needs `storage.objects` policies.
+  Static capability detection is only a heuristic; inspect wrappers/configuration
+  and keep real authentication and applicable negative authorization tests.
 - Baseline `docs/fluttercrew/spec.json` using: `node .agents/runtime/crew.js spec docs/fluttercrew/spec.json`.
 
 ## Phase 3 — Developer Review & Approval Gate (Human-in-the-Loop)
@@ -57,7 +86,8 @@ automated checks. Do not restart planning for an unchanged baseline.
 
 ## Phase 4 — Implementation
 
-- Implement features directly first across `models/`, `services/`, `viewmodels/`, and `views/` end to end.
+- Implementation-first: implement features directly across `models/`, `services/`,
+  `viewmodels/`, and `views/` end to end, then immediately execute tests.
 - Use small widgets, semantic labels, accessible contrast, >=48 logical-pixel touch targets, and responsive layouts.
 - Handle complete loading, empty, offline, validation, retry, and error states.
 - Record each REQ's implementation with
@@ -70,7 +100,11 @@ automated checks. Do not restart planning for an unchanged baseline.
 
 ## Phase 5 — Unit and Widget Testing
 
-- Immediately after implementation, write comprehensive unit tests (`test/features/...`) using `mocktail` and `bloc_test`.
+- Immediately after implementation, write and execute appropriate unit/state and
+  widget tests (`test/features/...`). Use existing `flutter_test`/`test`;
+  `bloc_test` only for BLoC/Cubit, `mocktail` only when mocks help. Neither is
+  mandatory for non-bloc or trivial tests. For a bug regression, the explicit
+  RED-GREEN-REFACTOR exception reproduces the failing behavior before the fix.
 - Cover business logic, edge cases, failure transitions, and mock external services.
 - Record traceability for each requirement using: `node .agents/runtime/crew.js trace <REQ-ID> <trace.json>`.
 - Track testing work with `task REQ-001 testing in_progress "<work>"` and
@@ -86,7 +120,8 @@ automated checks. Do not restart planning for an unchanged baseline.
 
 ## Phase 7 — Final Acceptance & Sign-off
 
-- For each criterion below, write a reviewed evidence report under `.fluttercrew/evidence/` and call `node .agents/runtime/crew.js accept <criterion> <evidence-file>`.
+- Author new reviewed evidence reports separately; never hand-edit active run
+  state or already recorded evidence. Register reports with runtime commands.
 
 Record `trace <REQ-ID> <trace.json>` for each specified requirement with real
 implementation/test/evidence links. `status` reports each ID and stale/missing spec
@@ -94,9 +129,10 @@ issues. Spec/brief edits need a reviewed impact report and rebaseline; no silent
 scope reduction. Renew developer approval, reconcile stale tasks, and redo ALL
 traces and global gates after rebaseline.
 
-Run `node .agents/runtime/crew.js verify`. It performs conservative static checks,
-format check, flutter analyze and flutter test. It saves logs and rejects stale
-source snapshots. This is not a security audit, DI reachability analyzer, backend
+Inspect the current Phase 6 `verify` result before acceptance; rerun verification
+if its source snapshot is stale, not merely because another phase is reached.
+It performs conservative static checks, format check, flutter analyze and flutter
+test and saves logs. This is not a security audit, DI reachability analyzer, backend
 connectivity test, complete YAML parser or proof of visual quality.
 
 For each criterion below, write a non-empty evidence report under
