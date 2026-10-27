@@ -15,6 +15,8 @@ function gates(t, platform) {
   const file = path.resolve(__dirname, '../.agents/runtime/gates.js');
   vm.runInNewContext(fs.readFileSync(file, 'utf8'), {
     module,
+    __dirname: path.dirname(file),
+    __filename: file,
     process: { platform },
     require(name) {
       if (name === 'node:child_process') {
@@ -25,7 +27,7 @@ function gates(t, platform) {
           }
         };
       }
-      if (name === './constants') return require('../.agents/runtime/constants');
+      if (name.startsWith('./')) return require(path.join(__dirname, '../.agents/runtime', name));
       return require(name);
     }
   }, { filename: file });

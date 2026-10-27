@@ -1,11 +1,18 @@
 'use strict';
 
 const path = require('node:path');
-const { CRITERIA, GATES, SNAPSHOT_INPUTS } = require('./constants');
+const { CRITERIA, DEFAULT_MODE, MODE_CRITERIA, SHARED_SCOPE, SNAPSHOT_INPUTS } = require('./constants');
 const { hash, hashFile, read, listFiles, resolveProjectFile } = require('./fsutil');
 const { validateSpec } = require('./spec');
-const { preflight } = require('./preflight');
+const { preflightDetail } = require('./preflight');
+const { activeGates } = require('./gates');
 const { writeDashboard } = require('./dashboard');
+
+/** Delivery mode baselined in the spec (hash-bound to approval). */
+const modeOf = (manifest) => manifest.spec?.mode || DEFAULT_MODE;
+
+/** Global attestations required for this run's mode. */
+const criteriaFor = (manifest) => MODE_CRITERIA[modeOf(manifest)] || CRITERIA;
 
 /** Content hash of everything that, when changed, invalidates previous evidence. */
 function snapshot(root, manifest) {
@@ -15,6 +22,27 @@ function snapshot(root, manifest) {
     ...(manifest.spec ? [manifest.spec.path] : []), ...tracedSources];
   const files = [...new Set(inputs.flatMap((item) => listFiles(path.join(root, item))))].sort();
   return hash(`${manifest.backend}\n${files
+    .map((file) => JSON.stringify([path.relative(root, file), hashFile(file)])).join('\n')}`);
+}
+
+/** Hash of inputs shared by every requirement (platform, backend config, lib/core, brief, spec). */
+function sharedSnapshot(root, manifest) {
+  const inputs = [...SHARED_SCOPE, manifest.requirements, ...(manifest.spec ? [manifest.spec.path] : [])];
+  const files = [...new Set(inputs.flatMap((item) => listFiles(path.join(root, item))))].sort();
+  return hash(`${manifest.backend}\n${files
+    .map((file) => JSON.stringify([path.relative(root, file), hashFile(file)])).join('\n')}`);
+}
+
+/**
+ * Freshness fingerprint for ONE requirement: the shared inputs plus only the
+ * implementation/test files linked from that requirement's trace. Editing an
+ * unrelated feature does not invalidate this requirement's evidence.
+ */
+function requirementSnapshot(root, manifest, id, shared = sharedSnapshot(root, manifest)) {
+  const linked = (manifest.traceability?.[id]?.references || [])
+    .filter((ref) => ref.kind !== 'evidence').map((ref) => ref.evidence);
+  const files = [...new Set(linked.flatMap((item) => listFiles(path.join(root, item))))].sort();
+  return hash(`${shared}\n${files
     .map((file) => JSON.stringify([path.relative(root, file), hashFile(file)])).join('\n')}`);
 }
 
@@ -48,10 +76,15 @@ function specStatus(root, manifest) {
 /** Per-requirement trace state, marking any entry whose evidence went stale. */
 function traceStatus(root, manifest, current) {
   const spec = specStatus(root, manifest);
+  const shared = spec.issues.length ? null : sharedSnapshot(root, manifest);
   const requirements = spec.requirements.map((requirement) => {
     const entry = manifest.traceability?.[requirement.id];
     let status = entry?.status || 'pending';
-    if (entry && (spec.issues.length || entry.snapshot !== current || !artifactValid(root, entry) ||
+    // Entries recorded before per-requirement scoping fall back to the global snapshot.
+    const fresh = entry && (entry.scopeSnapshot
+      ? entry.scopeSnapshot === requirementSnapshot(root, manifest, requirement.id, shared)
+      : entry.snapshot === current);
+    if (entry && (spec.issues.length || !fresh || !artifactValid(root, entry) ||
         !(entry.references || []).every((ref) => artifactValid(root, ref)))) {
       status = 'stale';
     }
@@ -71,7 +104,7 @@ function traceStatus(root, manifest, current) {
   };
 }
 
-const staleCriteria = (root, manifest, current) => CRITERIA.filter((id) =>
+const staleCriteria = (root, manifest, current) => criteriaFor(manifest).filter((id) =>
   !artifactValid(root, manifest.acceptance?.[id]) || manifest.acceptance[id].snapshot !== current);
 
 function approvalStatus(root, manifest, spec = specStatus(root, manifest)) {
@@ -91,16 +124,16 @@ function approvalStatus(root, manifest, spec = specStatus(root, manifest)) {
   };
 }
 
-function verificationStatus(root, manifest, current) {
+function verificationStatus(root, manifest, current, gates) {
   const verification = manifest.verification;
   const issues = [];
   if (!verification?.passed || verification.snapshot !== current) {
     issues.push('A passing verify for current inputs is required.');
   }
   const checks = verification?.checks || [];
-  if (verification && (checks.length !== GATES.length ||
-      !GATES.every((gate) => checks.filter((check) => check.name === gate.name && check.passed).length === 1))) {
-    issues.push('A passing verify with all format/analyze/tests gates is required.');
+  if (verification && (checks.length !== gates.length ||
+      !gates.every((gate) => checks.filter((check) => check.name === gate.name && check.passed).length === 1))) {
+    issues.push(`A passing verify with all ${gates.map((gate) => gate.name).join('/')} gates is required.`);
   }
   for (const check of checks) {
     try {
@@ -111,7 +144,7 @@ function verificationStatus(root, manifest, current) {
   return {
     status: !verification ? 'missing' : (issues.length ? (verification.passed ? 'stale' : 'failed') : 'valid'),
     valid: issues.length === 0, issues,
-    checks: GATES.map(({ name }) => {
+    checks: gates.map(({ name }) => {
       const matches = checks.filter((check) => check.name === name);
       const check = matches[0];
       const status = !check ? 'pending'
@@ -162,7 +195,8 @@ function nextActions(report) {
     add('trace', `${entry.id}: ${entry.status}`,
       entry.status === 'stale' ? 'Source, spec, trace report or linked evidence changed; inspect and revalidate this requirement.'
         : (entry.notes || 'Implement and test this requirement, then record reviewed evidence.'),
-      [`trace ${entry.id} ${entry.evidence ? quote(entry.evidence) : '<trace.json>'}`],
+      [`trace ${entry.id} ${entry.evidence ? quote(entry.evidence) : '<trace.json>'}`,
+        ...(report.verificationStatus.valid ? [`trace --auto ${entry.id}`] : [])],
       { requirementId: entry.id, state: entry.status });
   }
   if (!report.verificationStatus.valid && !report.sourceChangedSinceVerification) {
@@ -172,7 +206,8 @@ function nextActions(report) {
     const entry = report.acceptance?.[id];
     add('review', `${id}: ${entry ? 'stale' : 'missing'} review`,
       'Review current source and evidence before recording the attestation.',
-      [`accept ${id} ${entry ? quote(entry.evidence) : '<reviewed-evidence.md>'}`],
+      [`accept ${id} ${entry ? quote(entry.evidence) : '<reviewed-evidence.md>'}`,
+        ...(entry ? [] : [`accept --draft ${id}`])],
       { criterionId: id, state: entry ? 'stale' : 'pending' });
   }
   if (!actions.length && report.status !== 'done') {
@@ -190,9 +225,11 @@ function buildReport(root, manifest) {
   const missing = staleCriteria(root, manifest, current);
   const trace = traceStatus(root, manifest, current);
   const approval = approvalStatus(root, manifest, { issues: trace.specIssues });
-  const verification = verificationStatus(root, manifest, current);
+  const gates = activeGates(root);
+  const verification = verificationStatus(root, manifest, current, gates);
   const tasks = taskStatus(manifest, current, trace.specIssues);
-  const prerequisites = preflight(root, manifest.backend);
+  const { issues: prerequisiteFindings, suppressed } = preflightDetail(root, manifest.backend);
+  const prerequisites = prerequisiteFindings.map((entry) => entry.message);
   const acceptanceIssues = missing.map((id) =>
     `${manifest.acceptance?.[id] && !artifactValid(root, manifest.acceptance[id]) ? 'Invalid' : 'Missing/stale'} ${id} evidence.`);
   const issues = [...prerequisites, ...trace.issues, ...approval.issues, ...verification.issues,
@@ -207,9 +244,11 @@ function buildReport(root, manifest) {
     ...manifest, requirementStatus: trace.requirements, specIssues: trace.specIssues,
     status: issues.length ? (invalidated ? 'blocked' : 'in_progress')
       : (manifest.status === 'done' ? 'done' : 'in_progress'),
+    mode: modeOf(manifest), criteria: criteriaFor(manifest), gates,
     missingOrStaleCriteria: missing,
     sourceChangedSinceVerification: !!manifest.verification && manifest.verification.snapshot !== current,
-    preflight: prerequisites, approvalStatus: approval, verificationStatus: verification,
+    preflight: prerequisites, preflightSuppressed: suppressed,
+    approvalStatus: approval, verificationStatus: verification,
     taskStatus: tasks, completionIssues: issues
   };
   report.nextActions = nextActions(report);
@@ -220,7 +259,7 @@ function buildReport(root, manifest) {
       approval: approval.valid,
       verification: verification.valid,
       requirements: trace.requirements.filter((entry) => entry.status === 'passed').map((entry) => entry.id),
-      criteria: CRITERIA.filter((id) => !missing.includes(id)),
+      criteria: criteriaFor(manifest).filter((id) => !missing.includes(id)),
       tasks: tasks.filter((entry) => entry.status === 'done').map(({ id, phase }) => ({ id, phase }))
     },
     remaining: report.nextActions
@@ -239,6 +278,6 @@ function refreshDashboard(root, store) {
 }
 
 module.exports = {
-  snapshot, artifactValid, specStatus, traceStatus, approvalStatus, buildReport,
-  refreshDashboard, EMPTY_REPORT
+  snapshot, requirementSnapshot, sharedSnapshot, artifactValid, specStatus, traceStatus,
+  approvalStatus, buildReport, refreshDashboard, criteriaFor, modeOf, EMPTY_REPORT
 };

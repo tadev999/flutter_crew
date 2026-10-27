@@ -11,6 +11,8 @@ const { writeDashboard } = require('../dashboard');
 const { openBrowser } = require('../platform');
 const { ensureWatcher } = require('../watcher');
 const { parseArgs } = require('./args');
+const { gitDirty } = require('../modeguard');
+const { writeProfile } = require('../profile');
 
 /** After rendering: optionally open the browser and make sure the live watcher runs. */
 function present(ctx, flags, htmlPath) {
@@ -39,6 +41,7 @@ function start(ctx, args) {
 
   const manifest = newManifest({ requirements, backend });
   store.save(manifest);
+  try { writeProfile(root, { onlyIfMissing: true }); } catch { /* profile is advisory */ }
   const htmlPath = writeDashboard(root, buildReport(root, manifest).report);
   console.log('Run created. Follow .agents/workflows/feature-delivery.md');
   console.log(`📊 Live Dashboard: file://${path.resolve(htmlPath)}`);
@@ -77,7 +80,8 @@ function spec(ctx, args) {
   manifest.spec = {
     path: specPath, hash: digest, requirementsHash: briefHash,
     revision: (manifest.spec?.revision || 0) + 1,
-    ids: parsed.requirements.map((entry) => entry.id), change, at: new Date().toISOString()
+    ids: parsed.requirements.map((entry) => entry.id), mode: parsed.mode || 'feature',
+    modeReason: parsed.modeReason || '', change, at: new Date().toISOString()
   };
   Object.assign(manifest, { schemaVersion: 2, traceability: {}, acceptance: {}, verification: null, status: 'in_progress' });
   store.save(manifest);
@@ -92,10 +96,12 @@ function approve(ctx, args) {
   const spec = specStatus(root, manifest);
   if (spec.issues.length) throw new Error(spec.issues.join('\n'));
   const [notes] = parseArgs(args).positional;
+  const dirty = gitDirty(root);
   manifest.approved = {
     at: new Date().toISOString(), notes: notes || 'Developer approved requirements scope',
     specRevision: manifest.spec.revision, specHash: manifest.spec.hash,
-    requirementsHash: manifest.spec.requirementsHash
+    requirementsHash: manifest.spec.requirementsHash,
+    dirtyBaseline: dirty ? [...dirty].sort() : null
   };
   store.save(manifest);
   writeDashboard(root, buildReport(root, manifest).report);

@@ -192,7 +192,7 @@ async function main(argv = process.argv.slice(2)) {
     console.log(require('../package.json').version);
     return;
   }
-  if (Object.hasOwn(COMMANDS, command)) {
+  if (command !== 'doctor' && Object.hasOwn(COMMANDS, command)) {
     const allowed = command === 'start' ? ['--archive'] : command === 'dashboard' ? ['--open', '--no-open'] : [];
     const unknown = rest.find((value) => value.startsWith('-') && !allowed.includes(value));
     if (unknown) throw new Error(`Unknown flag: ${unknown}. Use flutter-crew ${command} --help.`);

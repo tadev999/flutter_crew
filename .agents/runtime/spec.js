@@ -1,5 +1,7 @@
 'use strict';
 
+const { MODES, MODE_LIMITS, DEFAULT_MODE } = require('./constants');
+
 const text = (value) => typeof value === 'string' && value.trim().length > 0;
 
 function strings(value, label, allowEmpty = false) {
@@ -12,6 +14,15 @@ function validateSpec(value) {
   if (!value || value.schemaVersion !== 1 || !Array.isArray(value.requirements) ||
       !value.requirements.length) {
     throw new Error('Spec requires schemaVersion: 1 and a non-empty requirements array.');
+  }
+  const mode = value.mode ?? DEFAULT_MODE;
+  if (!MODES.includes(mode)) throw new Error(`Spec mode must be one of: ${MODES.join(', ')}.`);
+  if (value.mode !== undefined && !text(value.modeReason)) {
+    throw new Error('Spec mode requires a non-empty modeReason for the developer to review.');
+  }
+  const limit = MODE_LIMITS[mode]?.maxRequirements;
+  if (limit && value.requirements.length > limit) {
+    throw new Error(`Mode "${mode}" allows at most ${limit} requirements; use mode "feature" or "app".`);
   }
   const ids = new Set();
   for (const requirement of value.requirements) {

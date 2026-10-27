@@ -78,7 +78,9 @@ function derivePipeline(report, signals = {}) {
   const verificationStale = verificationPassed && !verificationFresh;
   const acceptances = report?.acceptance || {};
   const missing = report?.missingOrStaleCriteria || [];
-  const acceptedCount = CRITERIA.filter((c) => !!acceptances[c] && !missing.includes(c)).length;
+  const criteria = report?.criteria || CRITERIA;
+  const gateDefs = report?.gates || GATES;
+  const acceptedCount = criteria.filter((c) => !!acceptances[c] && !missing.includes(c)).length;
 
   const allRequirementsPassed = totalReqs > 0 && passedReqs === totalReqs;
   const tasks = report?.taskStatus || [];
@@ -179,7 +181,7 @@ function derivePipeline(report, signals = {}) {
       desc: verificationFresh ? 'Format, analyze & tests PASSED'
         : (verificationStale ? 'Verification stale - inputs or execution logs changed, re-run verify'
           : (hasChecks ? (verificationPassed ? 'Passed' : 'Gate failed - fix and re-run verify') : (started[5] ? 'Ready: run crew.js verify' : 'Queued'))),
-      steps: GATES.map((g) => {
+      steps: gateDefs.map((g) => {
         const c = checks.find((x) => x.name === g.name);
         const state = report?.verificationStatus?.checks?.find((check) => check.name === g.name)?.status || 'pending';
         if (state === 'pending') return step(g.label, started[5] && !hasChecks ? 'active' : 'todo', 'not run');
@@ -190,8 +192,8 @@ function derivePipeline(report, signals = {}) {
     {
       id: 'done', number: 7, title: 'Acceptance & Done', agent: 'fleet lead',
       at: latestAcceptance(acceptances),
-      desc: status === 'done' ? 'Delivery complete' : `${acceptedCount}/5 criteria attested`,
-      steps: CRITERIA.map((c) => {
+      desc: status === 'done' ? 'Delivery complete' : `${acceptedCount}/${criteria.length} criteria attested`,
+      steps: criteria.map((c) => {
         const attested = !!acceptances[c] && !missing.includes(c);
         const stale = !!acceptances[c] && missing.includes(c);
         return step(`${c} attestation`, attested ? 'done' : (stale ? 'fail' : (started[6] ? 'active' : 'todo')), stale ? 'stale' : (attested ? 'attested' : 'missing'));

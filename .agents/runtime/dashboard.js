@@ -35,7 +35,8 @@ function generateDashboardHtml(report = {}, rootDir) {
   const checks = report.verification?.checks || [];
   const checkStates = report.verificationStatus?.checks || [];
   const checksPassed = checkStates.filter((entry) => entry.status === 'passed').length;
-  const reviews = CRITERIA.map((id) => {
+  const gateList = report.gates || GATES;
+  const reviews = (report.criteria || CRITERIA).map((id) => {
     const entry = report.acceptance?.[id];
     const state = !entry ? 'pending' : (report.missingOrStaleCriteria?.includes(id) ? 'stale' : 'passed');
     return { id, entry, state };
@@ -223,10 +224,10 @@ function generateDashboardHtml(report = {}, rootDir) {
       <section class="box" id="verification-panel" aria-labelledby="verification-title">
         <div class="box-header"><h2 id="verification-title"><span class="heading-mark">Verification &amp; evidence</span></h2></div>
         <details class="evidence-group" id="checks-details">
-          <summary><span><strong>Automated Checks</strong><small data-motion-key="checks-count" data-motion-value="${checksPassed}:${report.verificationStatus?.status}">${checksPassed}/3 Passed · current log integrity</small></span>
+          <summary><span><strong>Automated Checks</strong><small data-motion-key="checks-count" data-motion-value="${checksPassed}:${report.verificationStatus?.status}">${checksPassed}/${gateList.length} Passed · current log integrity</small></span>
             ${badge(report.verificationStatus?.valid ? 'Current' : ({ stale: 'Recheck needed', failed: 'Failed' }[report.verificationStatus?.status] || 'Not run'), tone(report.verificationStatus?.status))}
           </summary>
-          ${GATES.map((gate) => {
+          ${gateList.map((gate) => {
             const entry = checks.find((check) => check.name === gate.name);
             const state = checkStates.find((check) => check.name === gate.name)?.status || 'pending';
             const log = entry && !entry.passed ? tailLog(rootDir, entry.log) : '';
@@ -241,8 +242,8 @@ function generateDashboardHtml(report = {}, rootDir) {
           ${actions.filter(action => action.kind === 'review').map(actionRow).join('') || '<p class="detail-note">No review actions remaining.</p>'}
         </details>
         <details class="evidence-group" id="reviews-details">
-          <summary><span><strong>Review Attestations</strong><small data-motion-key="reviews-count" data-motion-value="${accepted}">${accepted}/5 current · ${5 - accepted} need attention</small></span>
-            ${badge(accepted === 5 ? 'Current' : (reviews.some((r) => r.state === 'stale') ? 'Review needed' : 'Pending'), accepted === 5 ? 'success' : (reviews.some((r) => r.state === 'stale') ? 'warning' : 'neutral'))}
+          <summary><span><strong>Review Attestations</strong><small data-motion-key="reviews-count" data-motion-value="${accepted}">${accepted}/${reviews.length} current · ${reviews.length - accepted} need attention</small></span>
+            ${badge(accepted === reviews.length ? 'Current' : (reviews.some((r) => r.state === 'stale') ? 'Review needed' : 'Pending'), accepted === reviews.length ? 'success' : (reviews.some((r) => r.state === 'stale') ? 'warning' : 'neutral'))}
           </summary>
           ${reviews.map(({ id, state, entry }) => `<div class="review-item">
             <div class="gate-item"><strong>${id}</strong>${badge({ passed: 'ATTESTED', stale: 'STALE', pending: 'MISSING' }[state], tone(state))}</div>

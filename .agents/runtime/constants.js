@@ -27,6 +27,37 @@ const GATES = Object.freeze([
   { name: 'tests', label: 'flutter test', sub: 'Unit & widget test suites' }
 ]);
 
+/** Optional gates enabled through docs/fluttercrew/config.json. */
+const OPTIONAL_GATES = Object.freeze({
+  codegen: { name: 'codegen', label: 'build_runner', sub: 'Generated code is up to date' },
+  coverage: { name: 'coverage', label: 'coverage', sub: 'Line coverage threshold' }
+});
+
+/**
+ * Delivery modes. The mode is declared in spec.json, so it is hash-bound to the
+ * approved spec revision; changing it requires a reviewed spec revision.
+ */
+const MODES = Object.freeze(['fix', 'feature', 'app']);
+const DEFAULT_MODE = 'feature';
+const MODE_CRITERIA = Object.freeze({
+  fix: Object.freeze(['requirements', 'security']),
+  feature: CRITERIA,
+  app: CRITERIA
+});
+const MODE_LIMITS = Object.freeze({ fix: { maxRequirements: 3, maxSourceFiles: 8 } });
+/** Paths a `fix` run must not touch (they need a feature/app spec revision). */
+const MODE_SENSITIVE = Object.freeze([
+  'pubspec.yaml', 'pubspec.lock', 'firebase.json', '.firebaserc', 'firestore.rules',
+  'firestore.indexes.json', 'storage.rules', 'supabase/', 'functions/'
+]);
+
+/** Inputs shared by every requirement: a change here invalidates every trace. */
+const SHARED_SCOPE = Object.freeze([
+  'assets', 'android', 'ios', 'web', 'macos', 'windows', 'linux', 'supabase',
+  'pubspec.yaml', 'pubspec.lock', 'analysis_options.yaml', 'firebase.json', '.firebaserc',
+  'firestore.rules', 'firestore.indexes.json', 'storage.rules', 'functions', 'lib/core'
+]);
+
 /** Artifact kinds a passed trace must link for each requirement. */
 const TRACE_KINDS = Object.freeze(['implementation', 'tests', 'evidence']);
 
@@ -54,7 +85,9 @@ const PATHS = Object.freeze({
   dashboard: '.fluttercrew/dashboard.html',
   watcherPid: '.fluttercrew/watch.pid',
   docsDir: 'docs/fluttercrew',
-  historyDir: 'docs/fluttercrew/history'
+  historyDir: 'docs/fluttercrew/history',
+  configFile: 'docs/fluttercrew/config.json',
+  profileFile: 'docs/fluttercrew/project-profile.md'
 });
 
 /** Files under docs/fluttercrew that belong to a single run and are archived with it. */
@@ -70,6 +103,7 @@ const LIMITS = Object.freeze({
 });
 
 module.exports = {
-  SCHEMA_VERSION, BACKENDS, CRITERIA, CRITERIA_DESCRIPTIONS, GATES, TRACE_KINDS,
+  SCHEMA_VERSION, BACKENDS, CRITERIA, CRITERIA_DESCRIPTIONS, GATES, OPTIONAL_GATES, TRACE_KINDS,
+  MODES, DEFAULT_MODE, MODE_CRITERIA, MODE_LIMITS, MODE_SENSITIVE, SHARED_SCOPE,
   IGNORED_DIRS, SNAPSHOT_INPUTS, PATHS, RUN_DOCUMENTS, LIMITS
 };

@@ -1,10 +1,10 @@
 'use strict';
 
-const { GATES } = require('../constants');
 const { hashFile, resolveProjectFile } = require('../fsutil');
-const { gatePlan } = require('../gates');
+const { gatePlan, activeGates } = require('../gates');
 const { preflight } = require('../preflight');
-const { snapshot, specStatus, approvalStatus, buildReport } = require('../report');
+const { modeIssues } = require('../modeguard');
+const { snapshot, specStatus, approvalStatus, buildReport, modeOf } = require('../report');
 
 /** Run the mechanical gates and persist a verification record bound to the current inputs. */
 function verify(ctx) {
@@ -17,7 +17,8 @@ function verify(ctx) {
   const before = snapshot(root, manifest);
   const spec = specStatus(root, manifest);
   const issues = [...spec.issues, ...approvalStatus(root, manifest, spec).issues,
-    ...preflight(root, manifest.backend)];
+    ...preflight(root, manifest.backend),
+    ...modeIssues(root, modeOf(manifest), manifest.approved?.dirtyBaseline)];
   const checks = issues.length
     ? []
     : gatePlan(root).map(({ name, executable, args }) => execute(root, name, executable, args));
@@ -29,7 +30,7 @@ function verify(ctx) {
   const after = snapshot(root, manifest);
   if (before !== after) issues.push('Inputs changed during verification. Run verify again.');
 
-  const passed = issues.length === 0 && checks.length === GATES.length && checks.every((check) => check.passed);
+  const passed = issues.length === 0 && checks.length === activeGates(root).length && checks.every((check) => check.passed);
   manifest.verification = { passed, snapshot: after, issues, checks, at: new Date().toISOString() };
   manifest.status = passed ? 'in_progress' : 'blocked';
   store.save(manifest);

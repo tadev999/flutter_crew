@@ -465,7 +465,7 @@ test('SDD: CLI exposes spec and trace through installed runtime', (t) => {
   assert.equal(trace.status, 0, trace.stderr);
 });
 
-test('SDD: multiple external source links converge after retracing stale IDs', (t) => {
+test('SDD: linking another requirement\'s external source keeps unrelated traces fresh', (t) => {
   const p = project(t);
   p.spec.requirements.push({ ...p.spec.requirements[0], id: 'REQ-002' });
   p.start();
@@ -473,10 +473,11 @@ test('SDD: multiple external source links converge after retracing stale IDs', (
   p.write('custom/two.dart', '// source two');
   p.trace('REQ-001', { implementation: ['custom/one.dart'] });
   p.trace('REQ-002', { implementation: ['custom/two.dart'] });
-  assert.equal(p.invoke(['status']).requirementStatus[0].status, 'stale');
-  p.trace('REQ-001', { implementation: ['custom/one.dart'] });
   assert.deepEqual(p.invoke(['status']).requirementStatus.map((entry) => entry.status), ['passed', 'passed']);
-  p.trace('REQ-002', { implementation: ['custom/two.dart'] });
+  // Editing only REQ-001's linked file invalidates REQ-001, not REQ-002.
+  p.write('custom/one.dart', '// source one changed');
+  assert.deepEqual(p.invoke(['status']).requirementStatus.map((entry) => entry.status), ['stale', 'passed']);
+  p.trace('REQ-001', { implementation: ['custom/one.dart'] });
   assert.deepEqual(p.invoke(['status']).requirementStatus.map((entry) => entry.status), ['passed', 'passed']);
 });
 
