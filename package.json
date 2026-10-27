@@ -1,6 +1,6 @@
 {
   "name": "flutter-crew",
-  "version": "1.3.5",
+  "version": "1.3.6",
   "description": "Flutter delivery workflows, Copilot agents and portable evidence-based quality gates for Firebase and Supabase.",
   "main": "bin/cli.js",
   "bin": {

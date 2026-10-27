@@ -177,7 +177,7 @@ guarantee that every host loads files automatically.
 
 ## Dashboard
 
-[![Animated demo of the current dashboard: developer approval, task progress, testing, verification, completion, stale evidence after source edits, and light theme. All data is simulated.](assets/dashboard_walkthrough.webp)](assets/dashboard_walkthrough.webp)
+[![Animated demo of the current dashboard: developer approval, task progress, testing, verification, completion, stale evidence after source edits, and light theme. All data is simulated.](https://raw.githubusercontent.com/tadev999/flutter_crew/main/assets/dashboard_walkthrough.webp)](https://raw.githubusercontent.com/tadev999/flutter_crew/main/assets/dashboard_walkthrough.webp)
 
 Run these commands from the Flutter project:
 

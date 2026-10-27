@@ -210,7 +210,11 @@ test('native adapters use host capabilities without model mandates or mandatory 
 
 test('README keeps direct-prompt onboarding and valid local documentation links', () => {
   const text = read('README.md');
-  assert.ok(text.includes('https://raw.githubusercontent.com/tadev999/flutter_crew/main/assets/dashboard_walkthrough.webp'));
+  const dashboardAsset = 'assets/dashboard_walkthrough.webp';
+  const dashboardUrl = `https://raw.githubusercontent.com/tadev999/flutter_crew/main/${dashboardAsset}`;
+  assert.ok([...text.matchAll(/!\[[^\]]*\]\(([^)]+)\)/g)]
+    .some((match) => match[1] === dashboardUrl), 'Dashboard image must use an absolute URL for npm');
+  assert.ok(fs.existsSync(path.join(root, dashboardAsset)), dashboardAsset);
   assert.match(normalize(text), /For implementation, include `FlutterCrew` in the request/);
   assert.match(normalize(text), /Advice, review-only and plan-only requests do not start a run/);
   assert.ok(text.includes('Firebase Auth and Firestore'));
