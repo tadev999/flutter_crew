@@ -190,9 +190,11 @@ test('performance guidance separates const, rebuilds, painting and retained list
 });
 
 test('native adapters use host capabilities without model mandates or mandatory fleet fanout', () => {
+  const frontmatter = /^---\r?\nname: [^\r\n]+\r?\ndescription: [^\r\n]+/;
   for (const name of [...list('.github/agents'), ...list('.agents/agents')]) {
     const text = read(name);
-    assert.match(text, /^---\nname: [^\n]+\ndescription: [^\n]+/);
+    assert.match(text.replace(/\r\n/g, '\n'), frontmatter, name);
+    assert.match(text.replace(/\r?\n/g, '\r\n'), frontmatter, name);
     assert.doesNotMatch(text, /^model:/m, name);
   }
   const lead = normalize(read('.github/agents/fluttercrew.agent.md'));
