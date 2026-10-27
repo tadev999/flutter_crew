@@ -47,6 +47,18 @@ Raw AI assistants generate code inside a black box—deciding architecture unila
 
 ---
 
+## Dashboard
+
+[![Animated demo of the current dashboard: developer approval, task progress, testing, verification, completion, stale evidence after source edits, and light theme. All data is simulated.](https://raw.githubusercontent.com/tadev999/flutter_crew/main/assets/dashboard_walkthrough.webp)](https://raw.githubusercontent.com/tadev999/flutter_crew/main/assets/dashboard_walkthrough.webp)
+
+Run these commands from the Flutter project:
+
+```bash
+node .agents/runtime/crew.js dashboard --open
+```
+
+The dashboard summarizes requirements, tasks, workflow stage, verification, and review evidence. In headless environments, start the watcher with `node .agents/runtime/crew.js watch`.
+
 ## Requirements
 
 - Node.js 18 or later
@@ -174,18 +186,6 @@ coverage and negative authorization tests remain part of delivery.
 registration format. Discovery depends on the host/version and workspace settings.
 This repository tests customization contracts; it does not simulate each IDE or
 guarantee that every host loads files automatically.
-
-## Dashboard
-
-[![Animated demo of the current dashboard: developer approval, task progress, testing, verification, completion, stale evidence after source edits, and light theme. All data is simulated.](https://raw.githubusercontent.com/tadev999/flutter_crew/main/assets/dashboard_walkthrough.webp)](https://raw.githubusercontent.com/tadev999/flutter_crew/main/assets/dashboard_walkthrough.webp)
-
-Run these commands from the Flutter project:
-
-```bash
-node .agents/runtime/crew.js dashboard --open
-```
-
-The dashboard summarizes requirements, tasks, workflow stage, verification, and review evidence. In headless environments, start the watcher with `node .agents/runtime/crew.js watch`.
 
 ## Frequently Asked Questions
 
