@@ -113,6 +113,7 @@ test('legacy migration centralizes originals, preserves modes and is idempotent'
   p.write('AGENTS.md', 'original instructions');
   p.write('.agents/runtime/crew.js', 'original runtime');
   fs.chmodSync(path.join(p.root, 'AGENTS.md'), 0o640);
+  const originalMode = fs.statSync(path.join(p.root, 'AGENTS.md')).mode & 0o777;
   success(p.run('install'));
   const legacy = legacyInstallation(p);
   p.write('unrelated.fluttercrew-123.bak', 'unrelated');
@@ -136,7 +137,7 @@ test('legacy migration centralizes originals, preserves modes and is idempotent'
   assert.deepEqual(snapshot(p.root), migrated);
   success(p.run('uninstall'));
   assert.equal(p.read('AGENTS.md'), 'original instructions');
-  assert.equal(fs.statSync(path.join(p.root, 'AGENTS.md')).mode & 0o777, 0o640);
+  assert.equal(fs.statSync(path.join(p.root, 'AGENTS.md')).mode & 0o777, originalMode);
   assert.equal(p.read('.agents/runtime/crew.js'), 'original runtime');
   assert.equal(p.read('unrelated.fluttercrew-123.bak'), 'unrelated');
   assert.equal(p.exists('.fluttercrew-installer'), false);

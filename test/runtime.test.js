@@ -8,6 +8,8 @@ const { spawn, spawnSync } = require('node:child_process');
 const { run, preflight, criteria, commandCheck } = require('../.agents/runtime/crew');
 const { validateSpec } = require('../.agents/runtime/spec');
 
+const removeDraftMarker = (text) => text.replace(/^<!-- FLUTTERCREW-DRAFT[^\r\n]*(?:\r?\n|$)/gm, '');
+
 function project(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fluttercrew-'));
   const beforeCleanup = [];
@@ -52,8 +54,8 @@ function project(t) {
     invoke(['feature', 'sync']);
     for (const slug of new Set(spec.requirements.map((entry) => entry.feature))) {
       const doc = path.join(root, `docs/features/${slug}/FEATURE.md`);
-      fs.writeFileSync(doc, fs.readFileSync(doc, 'utf8')
-        .replace(/^<!-- FLUTTERCREW-DRAFT.*\n/gm, '').replaceAll('_TODO_', 'Fixture fact.'));
+      fs.writeFileSync(doc, removeDraftMarker(fs.readFileSync(doc, 'utf8'))
+        .replaceAll('_TODO_', 'Fixture fact.'));
     }
   };
   const trace = (id = 'REQ-001', overrides = {}) => {
@@ -926,7 +928,7 @@ test('feature catalog: finish requires a current sync and a reviewed, non-draft 
   assert.match(draft, /Implementation: `lib\/main\.dart`/);
   assert.throws(() => p.invoke(['finish']), /FEATURE\.md is a draft/);
 
-  fs.writeFileSync(featureDoc(p), draft.replace(/^<!-- FLUTTERCREW-DRAFT.*\n/m, ''));
+  fs.writeFileSync(featureDoc(p), removeDraftMarker(draft));
   assert.throws(() => p.invoke(['finish']), /is a draft/, 'remaining _TODO_ placeholders still block');
   p.syncFeatures();
   assert.equal(p.invoke(['finish']).status, 'done');
@@ -938,6 +940,26 @@ test('feature catalog: finish requires a current sync and a reviewed, non-draft 
   assert.deepEqual(entry.tests, ['test/feature_test.dart']);
   assert.equal(p.invoke(['feature', 'sync']).written.length, 0, 'sync is idempotent');
 });
+
+for (const [label, newline] of [['LF', '\n'], ['CRLF', '\r\n']]) {
+  test(`feature catalog: fixture review removes draft markers with ${label} line endings`, (t) => {
+    const p = project(t);
+    p.start();
+    p.invoke(['verify']);
+    p.attest();
+    fs.rmSync(path.join(p.root, 'docs/features'), { recursive: true, force: true });
+    p.invoke(['feature', 'sync']);
+    const draft = fs.readFileSync(featureDoc(p), 'utf8').replace(/\r?\n/g, newline);
+    fs.writeFileSync(featureDoc(p), draft);
+    assert.throws(() => p.invoke(['finish']), /is a draft/);
+    fs.writeFileSync(featureDoc(p), removeDraftMarker(draft));
+    assert.throws(() => p.invoke(['finish']), /is a draft/, 'placeholders still require review');
+    p.syncFeatures();
+    assert.doesNotMatch(fs.readFileSync(featureDoc(p), 'utf8'), /FLUTTERCREW-DRAFT|_TODO_/);
+    assert.equal(p.invoke(['finish']).status, 'done');
+    assert.equal(p.invoke(['feature', 'sync']).written.length, 0);
+  });
+}
 
 test('feature catalog: hand-written narrative survives sync; behavior changes request re-review', (t) => {
   const p = project(t);

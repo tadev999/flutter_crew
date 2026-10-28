@@ -87,12 +87,6 @@ Run from a local FlutterCrew checkout:
 node bin/cli.js /path/to/flutter_project
 ```
 
-Uninstall from the Flutter project:
-
-```bash
-npx flutter-crew uninstall
-```
-
 
 
 Inspect available commands and diagnose your environment:
@@ -106,6 +100,13 @@ npx flutter-crew doctor
 `doctor` performs local checks only. It does not deploy, connect to your backend,
 approve a spec or start a delivery run. A missing SDK or configuration is reported
 with a next step; a passing diagnosis is not evidence of backend authorization.
+
+## Uninstall
+Uninstall from the Flutter project:
+
+```bash
+npx flutter-crew uninstall
+```
 
 ## Use
 
