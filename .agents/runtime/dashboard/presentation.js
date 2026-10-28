@@ -83,7 +83,7 @@ function presentation(report, pipeline) {
   const owner = {
     spec: 'Planner', approval: 'Developer', preflight: 'Developer / delivery agent',
     verify: 'Delivery agent', task: 'Implementation owner', trace: 'Requirement owner',
-    review: 'Reviewer', finish: 'Delivery lead'
+    review: 'Reviewer', feature: 'Delivery agent', finish: 'Delivery lead'
   }[primary?.kind] || (report.status === 'done' ? 'No action required' : 'Developer');
   const hero = {
     title: sourceChanged ? 'Source changed — revalidation needed' : (primary?.issue || (report.status === 'done' ? 'All clear — delivery complete' : (currentWork.length ? 'Continue recorded work' : 'Ready to start'))),
@@ -98,7 +98,8 @@ function presentation(report, pipeline) {
     if (!group) {
       group = { kind: action.kind, label: {
         task: 'Tasks', trace: 'Requirement evidence', review: 'Review attestations',
-        verify: 'Automated checks', approval: 'Approval', spec: 'Scope', preflight: 'Prerequisites', finish: 'Completion'
+        verify: 'Automated checks', approval: 'Approval', spec: 'Scope', preflight: 'Prerequisites',
+        feature: 'Feature catalog', finish: 'Completion'
       }[action.kind] || action.kind, actions: [] };
       groups.push(group);
     }

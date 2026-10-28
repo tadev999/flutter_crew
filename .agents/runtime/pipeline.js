@@ -132,7 +132,7 @@ function derivePipeline(report, signals = {}) {
     {
       id: 'spec', number: 2, title: 'Architecture & Spec', agent: 'architect',
       at: report?.spec?.at,
-      desc: hasSpec ? `Spec rev ${report.spec.revision || 1} - ${report.spec.ids?.length || 0} REQs` : (isStarted ? 'Defining MVVM schema & REQs' : 'Awaiting intake'),
+      desc: hasSpec ? `Spec rev ${report.spec.revision || 1} - ${report.spec.ids?.length || 0} REQs` : (isStarted ? 'Defining architecture & REQs' : 'Awaiting intake'),
       steps: [
         step('Requirement IDs baselined', pickState(hasSpec, isStarted && !hasSpec), hasSpec ? (report.spec.ids || []).join(', ') : ''),
         step('Acceptance criteria defined', pickState(hasSpec && totalReqs > 0, false),

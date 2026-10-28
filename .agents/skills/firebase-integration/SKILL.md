@@ -29,11 +29,11 @@ void main() async {
 }
 ```
 
-## 2. Firestore Remote DataSource with `withConverter`
+## 2. Firestore Service with `withConverter`
 
 ```dart
-class FirestoreUserRemoteDataSource {
-  const FirestoreUserRemoteDataSource(this._firestore);
+class FirestoreUserService {
+  const FirestoreUserService(this._firestore);
   final FirebaseFirestore _firestore;
 
   CollectionReference<UserDto> get _usersCollection =>

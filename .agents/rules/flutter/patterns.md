@@ -1,14 +1,17 @@
 # Flutter & Dart Architectural Pattern Rules
 
-## 1. Clean Architecture Boundaries
-- Features must be isolated into `lib/features/<feature>/` with `domain/`, `data/`, and `presentation/`.
-- Domain layer must NEVER import Flutter UI packages (`package:flutter/*`) or third-party backend SDKs (`cloud_firestore`, `supabase_flutter`).
-- Presentation layer only interacts with Domain UseCases or Repository interfaces.
+## 1. Architecture: feature-first BLoC or the project's existing pattern
+- If the target app already has an established architecture or state management (Riverpod, Provider, ...), follow it consistently; do not introduce a new layering scheme.
+- Otherwise use feature-first BLoC: `lib/features/<feature>/` with `models/`, `services/`, `bloc/`, `views/` (see the `flutter-bloc-architecture` skill).
+- `models/`: immutable entities/DTOs with validated `fromJson`/`toJson`; no Flutter UI imports.
+- `services/`: backend, storage and API access behind small interfaces injected by constructor.
+- `bloc/`: Bloc/Cubit with sealed states (and events for Bloc); business logic only, no `BuildContext`, widgets or `dart:ui`.
+- `views/`: widgets only; render state with `BlocBuilder`/`BlocSelector`, side effects with `BlocListener`, and forward user actions to the Bloc/Cubit.
 
-## 2. Repository Pattern
-- Define repository contracts as `abstract interface class FeatureRepository` in `domain/repositories/`.
-- Concrete implementations belong in `data/repositories/` and depend on abstracted DataSources.
-- Return functional `Either<Failure, T>` (or Result pattern) from repository methods to force explicit error handling.
+## 2. Services and error handling
+- Views never call services or backend SDKs directly; Blocs/Cubits depend on service interfaces, not concrete classes.
+- Map backend exceptions to typed failures (e.g. a sealed `Failure`) or the project's existing error type; never swallow errors.
+- Do not add use-case, repository or data-source layers unless the project already uses them.
 
 ## 3. State Management Patterns
 - States must be modeled as Dart 3 `sealed class` hierarchies (e.g. `Initial`, `Loading`, `Success`, `Failure`).

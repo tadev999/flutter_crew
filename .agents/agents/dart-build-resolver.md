@@ -46,7 +46,7 @@ flutter test 2>&1
 1. **Type Mismatch & Nullability (`invalid_assignment`)**:
    - Trace null origin. Add null-aware fallback (`?? defaultValue`) or explicit type cast only if guaranteed.
 2. **Missing Implementation (`missing_override`)**:
-   - Check interface definition in `domain/` or external package and implement all missing contract methods.
+   - Check the interface definition (e.g. a service interface in `services/` or an external package) and implement all missing contract methods.
 3. **Stale Code Generation (`part of ... expected`)**:
    - Clean stale generated files: `flutter clean`, `flutter pub get`, then run `dart run build_runner build --delete-conflicting-outputs`.
 4. **Pub Version Conflict (`version solving failed`)**:

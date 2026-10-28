@@ -10,7 +10,7 @@ Invokes the **firebase-specialist** and **database-reviewer** agents.
 
 1. Audits `firestore.rules` and `storage.rules`.
 2. Verifies Firestore document schemas and index requirements (`firestore.indexes.json`).
-3. Generates or reviews `withConverter<T>` DataSource implementations.
+3. Generates or reviews `withConverter<T>` service implementations.
 
 ## Usage
 

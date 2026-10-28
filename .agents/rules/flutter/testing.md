@@ -3,7 +3,7 @@
 ## 1. Test Standards
 - Write tests following the **Arrange - Act - Assert (AAA)** pattern.
 - Mock all external interfaces using `mocktail` (preferred) or `mockito`.
-- Target 80%+ test coverage for domain UseCases, Repositories, and State Notifiers/Blocs.
+- Target 80%+ test coverage for Blocs/Cubits, services and model validation.
 
 ## 2. Unit & State Testing
 - Use `bloc_test` for all BLoC and Cubit state transitions.

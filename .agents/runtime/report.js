@@ -7,6 +7,7 @@ const { validateSpec } = require('./spec');
 const { preflightDetail } = require('./preflight');
 const { activeGates } = require('./gates');
 const { writeDashboard } = require('./dashboard');
+const { featureIssues } = require('./features');
 
 /** Delivery mode baselined in the spec (hash-bound to approval). */
 const modeOf = (manifest) => manifest.spec?.mode || DEFAULT_MODE;
@@ -60,7 +61,7 @@ function specStatus(root, manifest) {
   let requirements = [];
   try {
     const file = resolveProjectFile(root, manifest.spec.path);
-    requirements = validateSpec(JSON.parse(read(file))).requirements;
+    requirements = validateSpec(JSON.parse(read(file)), { legacy: true }).requirements;
     if (hashFile(file) !== manifest.spec.hash) issues.push('Spec changed; rebaseline with an impact report.');
     const brief = resolveProjectFile(root, manifest.requirements);
     if (hashFile(brief) !== manifest.spec.requirementsHash) {
@@ -91,6 +92,7 @@ function traceStatus(root, manifest, current) {
     return {
       id: requirement.id, status, recordedStatus: entry?.status || null, recordedAt: entry?.at || null,
       description: requirement.description || '', source: requirement.source || '',
+      feature: requirement.feature || null,
       acceptanceCriteria: requirement.acceptanceCriteria || [],
       verification: requirement.verification || 'automated',
       notes: entry?.notes || '', evidence: entry?.evidence || '',
@@ -210,6 +212,10 @@ function nextActions(report) {
         ...(entry ? [] : [`accept --draft ${id}`])],
       { criterionId: id, state: entry ? 'stale' : 'pending' });
   }
+  // Syncing before every ID passes would only record interim statuses.
+  if (report.featureIssues.length && report.requirementStatus.every((entry) => entry.status === 'passed')) {
+    add('feature', 'Feature catalog needs update', report.featureIssues.join(' '), ['feature sync']);
+  }
   if (!actions.length && report.status !== 'done') {
     add('finish', 'Ready to finish', 'All required evidence is current.', ['finish']);
   }
@@ -232,9 +238,10 @@ function buildReport(root, manifest) {
   const prerequisites = prerequisiteFindings.map((entry) => entry.message);
   const acceptanceIssues = missing.map((id) =>
     `${manifest.acceptance?.[id] && !artifactValid(root, manifest.acceptance[id]) ? 'Invalid' : 'Missing/stale'} ${id} evidence.`);
+  const catalog = trace.specIssues.length ? [] : featureIssues(root, trace.requirements);
   const issues = [...prerequisites, ...trace.issues, ...approval.issues, ...verification.issues,
     ...acceptanceIssues, ...tasks.filter((entry) => entry.status !== 'done')
-      .map((entry) => `${entry.id} ${entry.phase}: ${entry.status}`)];
+      .map((entry) => `${entry.id} ${entry.phase}: ${entry.status}`), ...catalog];
   const invalidated = manifest.status === 'done' || manifest.status === 'blocked' ||
     approval.status === 'stale' || verification.status === 'stale' || verification.status === 'failed' ||
     missing.some((id) => !!manifest.acceptance?.[id]) ||
@@ -249,7 +256,7 @@ function buildReport(root, manifest) {
     sourceChangedSinceVerification: !!manifest.verification && manifest.verification.snapshot !== current,
     preflight: prerequisites, preflightSuppressed: suppressed,
     approvalStatus: approval, verificationStatus: verification,
-    taskStatus: tasks, completionIssues: issues
+    taskStatus: tasks, featureIssues: catalog, completionIssues: issues
   };
   report.nextActions = nextActions(report);
   report.nextAction = report.nextActions[0] || null;

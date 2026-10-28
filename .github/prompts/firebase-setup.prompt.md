@@ -15,7 +15,7 @@ Responsibilities:
 2. **Initialization**: Configure `Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)` in `main.dart`.
 3. **Data Modeling**:
    - Create typed Firestore collections with `withConverter<T>()`.
-   - Implement clean separation between Firestore JSON documents and Dart Entities.
+   - Implement clean separation between Firestore JSON documents and typed Dart models.
 4. **Security Rules**:
    - Generate production-grade `firestore.rules` and `storage.rules`.
    - Never allow open read/write (`allow read, write: if true;`).

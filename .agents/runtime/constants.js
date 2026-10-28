@@ -87,8 +87,12 @@ const PATHS = Object.freeze({
   docsDir: 'docs/fluttercrew',
   historyDir: 'docs/fluttercrew/history',
   configFile: 'docs/fluttercrew/config.json',
-  profileFile: 'docs/fluttercrew/project-profile.md'
+  profileFile: 'docs/fluttercrew/project-profile.md',
+  featuresDir: 'docs/features'
 });
+
+/** Marks agent-generated skeletons that a human/reviewer must complete before they count. */
+const DRAFT_MARKER = 'FLUTTERCREW-DRAFT';
 
 /** Files under docs/fluttercrew that belong to a single run and are archived with it. */
 const RUN_DOCUMENTS = Object.freeze(['request.md', 'spec.json', 'change.md']);
@@ -105,5 +109,5 @@ const LIMITS = Object.freeze({
 module.exports = {
   SCHEMA_VERSION, BACKENDS, CRITERIA, CRITERIA_DESCRIPTIONS, GATES, OPTIONAL_GATES, TRACE_KINDS,
   MODES, DEFAULT_MODE, MODE_CRITERIA, MODE_LIMITS, MODE_SENSITIVE, SHARED_SCOPE,
-  IGNORED_DIRS, SNAPSHOT_INPUTS, PATHS, RUN_DOCUMENTS, LIMITS
+  IGNORED_DIRS, SNAPSHOT_INPUTS, PATHS, RUN_DOCUMENTS, LIMITS, DRAFT_MARKER
 };

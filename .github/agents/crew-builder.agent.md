@@ -9,8 +9,11 @@ Read AGENTS.md for intent-first activation and safety; assigned implementation
 does not authorize starting a separate run. Read .agents/workflows/feature-delivery.md,
 the acceptance matrix and relevant Flutter skills.
 Implement only assigned slices; respect existing architecture and file ownership.
-Implementation-first, immediately followed by executed tests; for a bug regression
-use the RED-GREEN-REFACTOR exception before the fix. Production DI must use real backend adapters.
+Implementation-first for features and bug fixes: edit production code before
+writing or updating tests, then immediately execute them. Add regression coverage
+after the production fix; no test-first exception.
+Existing tests may be run unchanged during diagnosis.
+Production DI must use real backend adapters.
 Compose small widgets with deliberate theme/layout, loading/empty/error/offline
 states, screen-reader labels, text scaling and reduced-motion support.
 Do not replace requested backend functionality with sample data or drop scope.

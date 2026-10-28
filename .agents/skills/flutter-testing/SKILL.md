@@ -8,8 +8,10 @@ description: Comprehensive testing guide for Flutter unit, widget, and integrati
 This skill details how to write rock-solid tests across the Flutter test pyramid.
 
 Follow AGENTS.md and `.agents/workflows/spec-driven-delivery.md` for delivery.
-Default to implementation-first, immediately followed by executed tests. For a bug
-regression use the RED-GREEN-REFACTOR exception: demonstrate failure before fixing.
+Use implementation-first for features and bug fixes: edit production code before
+writing or updating tests, then immediately execute them. Add regression coverage
+after the production fix; no test-first exception.
+Existing tests may be run unchanged during diagnosis.
 Automate business/state/security behavior and relevant failures.
 
 Use existing `flutter_test`/`test`; `bloc_test` only for BLoC/Cubit and `mocktail`
@@ -25,48 +27,46 @@ Await async work; use bounded `pump()` for ongoing animations and
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-// Contract
-abstract interface class CartDataSource {
+// Service contract
+abstract interface class CartService {
   Future<List<ItemModel>> fetchCart();
 }
 
-// Mock definition
-class MockCartDataSource extends Mock implements CartDataSource {}
+class MockCartService extends Mock implements CartService {}
 
 void main() {
-  late MockCartDataSource mockDataSource;
-  late CartRepositoryImpl repository;
+  late MockCartService mockService;
+  late CartCubit cubit;
 
   setUp(() {
-    mockDataSource = MockCartDataSource();
-    repository = CartRepositoryImpl(mockDataSource);
+    mockService = MockCartService();
+    cubit = CartCubit(mockService);
   });
 
-  group('getCart', () {
-    test('returns items when dataSource call succeeds', () async {
+  group('loadCart', () {
+    test('exposes items when the service call succeeds', () async {
       // Arrange
       final tItems = [ItemModel(id: '1', name: 'Widget A')];
-      when(() => mockDataSource.fetchCart()).thenAnswer((_) async => tItems);
+      when(() => mockService.fetchCart()).thenAnswer((_) async => tItems);
 
       // Act
-      final result = await repository.getCart();
+      await cubit.loadCart();
 
       // Assert
-      expect(result.isRight(), isTrue);
-      expect(result.getOrElse(() => []), equals(tItems.map((e) => e.toDomain()).toList()));
-      verify(() => mockDataSource.fetchCart()).called(1);
+      expect(cubit.state, CartLoaded(tItems));
+      verify(() => mockService.fetchCart()).called(1);
     });
 
-    test('returns Failure when dataSource throws Exception', () async {
+    test('exposes a failure state when the service throws', () async {
       // Arrange
-      when(() => mockDataSource.fetchCart()).thenThrow(Exception('Network error'));
+      when(() => mockService.fetchCart()).thenThrow(Exception('Network error'));
 
       // Act
-      final result = await repository.getCart();
+      await cubit.loadCart();
 
       // Assert
-      expect(result.isLeft(), isTrue);
-      verify(() => mockDataSource.fetchCart()).called(1);
+      expect(cubit.state, isA<CartFailure>());
+      verify(() => mockService.fetchCart()).called(1);
     });
   });
 }
@@ -81,19 +81,19 @@ import 'package:mocktail/mocktail.dart';
 
 void main() {
   group('CartBloc', () {
-    late MockGetCartUseCase mockGetCartUseCase;
+    late MockCartService mockService;
 
     setUp(() {
-      mockGetCartUseCase = MockGetCartUseCase();
+      mockService = MockCartService();
     });
 
     blocTest<CartBloc, CartState>(
-      'emits [CartLoading, CartLoaded] when LoadCart is added and succeeds',
+      'emits [CartLoading, CartLoaded] when CartRequested is added',
       build: () {
-        when(() => mockGetCartUseCase()).thenAnswer((_) async => const Right([testCartItem]));
-        return CartBloc(mockGetCartUseCase);
+        when(() => mockService.fetchCart()).thenAnswer((_) async => [testCartItem]);
+        return CartBloc(mockService);
       },
-      act: (bloc) => bloc.add(const LoadCartEvent()),
+      act: (bloc) => bloc.add(const CartRequested()),
       expect: () => [
         const CartLoading(),
         const CartLoaded([testCartItem]),

@@ -18,12 +18,12 @@ Follow this workflow:
    - Project Name (e.g. `ecommerce_app`)
    - Target Platforms (iOS, Android, Web, macOS, Windows, Linux)
    - Backend: **Firebase** vs **Supabase**
-   - State Management: **BLoC** vs **Riverpod**
+   - State Management: **BLoC** (default) vs **Riverpod**
 2. **Scaffold Project**:
    - Provide or execute `flutter create --platforms=<platforms> <name>`
    - Add necessary dependencies (`pubspec.yaml`)
-   - Generate feature-first MVVM folders: `core/`, `features/home/models/`,
-     `features/home/services/`, `features/home/viewmodels/`, `features/home/views/`.
+   - Generate feature-first BLoC folders: `core/`, `features/home/models/`,
+     `features/home/services/`, `features/home/bloc/`, `features/home/views/`.
    - Setup initial backend config:
      - For Supabase: `.env.example`, Supabase client initialization in `main.dart`, initial SQL migration with RLS enabled.
      - For Firebase: Initial `firestore.rules`, Firebase initialization in `main.dart`.

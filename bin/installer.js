@@ -4,9 +4,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-const MANIFEST = '.fluttercrew-install.json';
+const INSTALLER_DIR = '.fluttercrew-installer';
+const MANIFEST = `${INSTALLER_DIR}/manifest.json`;
+const LEGACY_MANIFEST = '.fluttercrew-install.json';
+const backupPath = (relative) => `${INSTALLER_DIR}/backups/${relative}`;
 const ITEMS = ['.vscode', '.github', '.agents', '.cursorrules', 'AGENTS.md', 'GEMINI.md', 'CLAUDE.md'];
-const CONFIG = new Set(['.vscode/settings.json', '.vscode/tasks.json', '.vscode/extensions.json']);
+// Team-owned project knowledge and run evidence: never written or removed by install/uninstall.
+const PRESERVED = ['docs/features/', 'docs/fluttercrew/', '.fluttercrew/', '.agents/local/'];
 const hash = (data) => crypto.createHash('sha256').update(data).digest('hex');
 const stat = (file) => {
   try { return fs.lstatSync(file); } catch (error) {
@@ -50,9 +54,16 @@ function regular(root, relative) {
 }
 
 function readManifest(root) {
-  if (!regular(root, MANIFEST)) return { version: 1, files: {}, directories: [] };
-  const value = JSON.parse(fs.readFileSync(path.join(root, MANIFEST), 'utf8'));
-  if (value.version !== 1 || !value.files || typeof value.files !== 'object' ||
+  for (const relative of [INSTALLER_DIR, `${INSTALLER_DIR}/backups`]) {
+    const info = stat(safePath(root, relative));
+    if (info && !info.isDirectory()) throw new Error(`Expected directory: ${relative}`);
+  }
+  const current = regular(root, MANIFEST);
+  const legacy = regular(root, LEGACY_MANIFEST);
+  if (current && legacy) throw new Error('Both installer manifests exist; preserve recovery files and resolve the conflict manually.');
+  if (!current && !legacy) return { version: 2, files: {}, directories: [] };
+  const value = JSON.parse(fs.readFileSync(path.join(root, current ? MANIFEST : LEGACY_MANIFEST), 'utf8'));
+  if (value.version !== (current ? 2 : 1) || !value.files || typeof value.files !== 'object' ||
       Array.isArray(value.files) || !Array.isArray(value.directories)) {
     throw new Error('Unsupported installation manifest; preserve it and recover manually.');
   }
@@ -64,8 +75,9 @@ function readManifest(root) {
     if (!entry || !/^[a-f0-9]{64}$/.test(entry.hash)) throw new Error(`Invalid manifest entry: ${relative}`);
     if (entry.backup) {
       if (typeof entry.backup.path !== 'string' ||
-          !entry.backup.path.startsWith(`${relative}.fluttercrew-`) ||
-          !entry.backup.path.endsWith('.bak') || !/^[a-f0-9]{64}$/.test(entry.backup.hash)) {
+          (current ? entry.backup.path !== backupPath(relative) :
+            (!entry.backup.path.startsWith(`${relative}.fluttercrew-`) || !entry.backup.path.endsWith('.bak'))) ||
+          !/^[a-f0-9]{64}$/.test(entry.backup.hash)) {
         throw new Error(`Invalid backup entry: ${relative}`);
       }
       regular(root, entry.backup.path);
@@ -84,7 +96,8 @@ function readManifest(root) {
 function sourceFiles(source) {
   const files = [];
   function visit(relative) {
-    if (relative === '.github/workflows/ci.yml') return;
+    if (relative === '.github/workflows/ci.yml' || relative === '.agents/local' ||
+        /\.fluttercrew-.*\.bak$/.test(relative)) return;
     const file = safePath(source, relative);
     const info = stat(file);
     if (!info) return;
@@ -100,6 +113,7 @@ function sourceFiles(source) {
 function saveManifest(root, manifest) {
   // The manifest contains ownership and backup locations, never active run state.
   regular(root, MANIFEST);
+  fs.mkdirSync(safePath(root, INSTALLER_DIR), { recursive: true, mode: 0o700 });
   const pending = path.join(root, `${MANIFEST}.${crypto.randomUUID()}.pending`);
   try {
     fs.writeFileSync(pending, `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
@@ -107,6 +121,50 @@ function saveManifest(root, manifest) {
   } finally {
     fs.rmSync(pending, { force: true });
   }
+}
+
+function prepareMigration(root, manifest) {
+  if (manifest.version !== 1) return () => {};
+  const moves = [];
+  for (const [relative, entry] of Object.entries(manifest.files)) {
+    if (!entry.backup) continue;
+    const from = entry.backup.path;
+    const to = backupPath(relative);
+    if (!regular(root, from) || hash(fs.readFileSync(path.join(root, from))) !== entry.backup.hash) {
+      throw new Error(`Cannot migrate: backup missing or modified (${from}). No recovery files were changed.`);
+    }
+    if (stat(safePath(root, to))) throw new Error(`Cannot migrate: backup destination already exists (${to}).`);
+    moves.push({ from, to, backup: entry.backup });
+  }
+  for (const { to, backup } of moves) backup.path = to;
+  manifest.version = 2;
+  const migrated = JSON.parse(JSON.stringify(manifest));
+  const migrate = (dryRun) => {
+    console.log(`${dryRun ? 'Would migrate' : 'Migrating'} legacy installer metadata and ${moves.length} backup(s) into ${INSTALLER_DIR}/.`);
+    if (dryRun) return;
+    for (const { from, to, backup } of moves) {
+      fs.mkdirSync(path.dirname(safePath(root, to)), { recursive: true, mode: 0o700 });
+      fs.copyFileSync(path.join(root, from), path.join(root, to), fs.constants.COPYFILE_EXCL);
+      fs.chmodSync(path.join(root, to), backup.mode ?? 0o600);
+    }
+    saveManifest(root, migrated);
+    fs.unlinkSync(path.join(root, LEGACY_MANIFEST));
+    for (const { from } of moves) fs.unlinkSync(path.join(root, from));
+  };
+  migrate.sources = new Map(moves.map(({ from, to }) => [to, from]));
+  return migrate;
+}
+
+function pruneRecoveryDirectories(root) {
+  function prune(relative) {
+    const full = safePath(root, relative);
+    if (!stat(full)?.isDirectory()) return;
+    for (const entry of fs.readdirSync(full, { withFileTypes: true })) {
+      if (entry.isDirectory()) prune(`${relative}/${entry.name}`);
+    }
+    if (!fs.readdirSync(full).length) fs.rmdirSync(full);
+  }
+  prune(INSTALLER_DIR);
 }
 
 function install(source, target, { dryRun = false } = {}) {
@@ -118,11 +176,12 @@ function install(source, target, { dryRun = false } = {}) {
   }
   if (stat(root) && !stat(root).isDirectory()) throw new Error(`Expected directory: ${root}`);
   const manifest = readManifest(root);
+  const migrate = prepareMigration(root, manifest);
   const writes = [];
   const contents = sourceFiles(source).map((relative) => [relative, fs.readFileSync(path.join(source, relative))]);
   const ignoreInfo = regular(root, '.gitignore');
   const originalIgnore = ignoreInfo ? fs.readFileSync(path.join(root, '.gitignore'), 'utf8') : '';
-  const missing = ['.fluttercrew/', MANIFEST, '*.fluttercrew-*.bak']
+  const missing = ['.fluttercrew/', `${INSTALLER_DIR}/`, LEGACY_MANIFEST, '*.fluttercrew-*.bak']
     .filter((line) => !originalIgnore.split(/\r?\n/).includes(line));
   if (missing.length && manifest.files['.gitignore'] &&
       (!ignoreInfo || hash(Buffer.from(originalIgnore)) !== manifest.files['.gitignore'].hash)) {
@@ -137,19 +196,21 @@ function install(source, target, { dryRun = false } = {}) {
     const info = regular(root, relative);
     const current = info ? fs.readFileSync(path.join(root, relative)) : null;
     const owned = manifest.files[relative];
-    if (owned && (!current || hash(current) !== owned.hash)) {
-      console.log(`Preserved locally changed/deleted file: ${relative}; ownership retained for recovery.`);
+    if (relative === '.gitignore' && owned && (!current || hash(current) !== owned.hash)) {
+      console.log('Preserved locally changed .gitignore; ownership retained for recovery.');
       continue;
     }
-    if (!owned && current && CONFIG.has(relative)) {
-      console.log(`Preserved existing ${relative} unchanged (JSON/JSONC); configure FlutterCrew manually if needed.`);
+    if (current && current.equals(data)) {
+      if (owned) manifest.files[relative] = { ...owned, hash: hash(data) };
       continue;
     }
-    if (current && current.equals(data)) continue;
+    if (owned && current && hash(current) !== owned.hash) {
+      console.log(`Replacing locally modified FlutterCrew file: ${relative}`);
+    }
     let backup = owned?.backup || null;
     if (!owned && current) {
       backup = {
-        path: `${relative}.fluttercrew-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.bak`,
+        path: backupPath(relative),
         hash: hash(current),
         mode: info.mode & 0o777,
       };
@@ -165,48 +226,111 @@ function install(source, target, { dryRun = false } = {}) {
       directory = path.posix.dirname(directory);
     }
   }
+
+  // Previously shipped files absent from this version are removed; their pre-install originals return.
+  const shipped = new Set(contents.map(([relative]) => relative));
+  const removals = [];
+  for (const [relative, entry] of Object.entries(manifest.files)) {
+    if (shipped.has(relative) || relative === '.gitignore') continue;
+    const sourcePath = migrate.sources?.get(entry.backup?.path) || entry.backup?.path;
+    if (entry.backup && (!regular(root, sourcePath) ||
+        hash(fs.readFileSync(path.join(root, sourcePath))) !== entry.backup.hash)) {
+      throw new Error(`Cannot remove retired file: backup missing or modified (${sourcePath}).`);
+    }
+    const backup = entry.backup;
+    removals.push({ relative, backup, present: Boolean(regular(root, relative)) });
+    delete manifest.files[relative];
+  }
   console.log(`${dryRun ? 'Dry run: would install' : 'Installing'} ${writes.length} file(s) in ${root}`);
   if (dryRun) {
+    migrate(true);
     for (const { relative, current, backup } of writes) {
       console.log(`  ${current ? 'REPLACE' : 'ADD'} ${relative}`);
       if (backup) console.log(`  BACK UP ${relative} -> ${backup.path}`);
     }
+    for (const { relative, backup, present } of removals) {
+      if (backup) console.log(`  RESTORE ${relative} <- ${backup.path}`);
+      else if (present) console.log(`  DELETE ${relative} (no longer shipped)`);
+    }
+    console.log(`  KEEP ${PRESERVED.join(', ')}`);
     console.log(`  WRITE ${MANIFEST} (ownership/recovery metadata)`);
     return;
   }
   fs.mkdirSync(root, { recursive: true });
+  migrate(false);
   for (const { relative, current, backup } of writes) {
     fs.mkdirSync(path.dirname(path.join(root, relative)), { recursive: true });
     if (backup) {
+      fs.mkdirSync(path.dirname(safePath(root, backup.path)), { recursive: true, mode: 0o700 });
       fs.writeFileSync(path.join(root, backup.path), current, { flag: 'wx', mode: backup.mode });
       console.log(`Saved backup: ${backup.path}`);
     }
   }
   saveManifest(root, manifest);
   for (const { relative, data } of writes) fs.writeFileSync(path.join(root, relative), data);
-  console.log('FlutterCrew installation complete. Existing local settings and run evidence are preserved.');
+  for (const { relative, backup, present } of removals) {
+    const file = path.join(root, relative);
+    if (backup) {
+      fs.copyFileSync(path.join(root, backup.path), file);
+      fs.chmodSync(file, backup.mode ?? 0o600);
+      fs.unlinkSync(path.join(root, backup.path));
+      console.log(`Restored ${relative} from ${backup.path}; FlutterCrew no longer ships it.`);
+    } else if (present) {
+      fs.rmSync(file, { force: true });
+      console.log(`Removed ${relative}; FlutterCrew no longer ships it.`);
+    }
+  }
+  manifest.directories = pruneEmptyDirectories(root, manifest.directories,
+    removals.map(({ relative }) => path.posix.dirname(relative)));
+  saveManifest(root, manifest);
+  pruneRecoveryDirectories(root);
+  console.log(`FlutterCrew installation complete. Project documents and run evidence were not touched: ${PRESERVED.join(', ')}.`);
+}
+
+/** Remove empty owned directories and empty parents of removed files, deepest first. */
+function pruneEmptyDirectories(root, owned, candidates = []) {
+  const all = new Set(owned);
+  for (let directory of candidates) {
+    while (directory !== '.' && ITEMS.some((item) => directory === item || directory.startsWith(`${item}/`))) {
+      all.add(directory);
+      directory = path.posix.dirname(directory);
+    }
+  }
+  const kept = [];
+  for (const directory of [...all].sort((a, b) => b.length - a.length)) {
+    const full = safePath(root, directory);
+    if (!stat(full)) continue;
+    if (fs.readdirSync(full).length) {
+      if (owned.includes(directory)) kept.push(directory);
+      continue;
+    }
+    fs.rmdirSync(full);
+  }
+  return kept;
 }
 
 function uninstall(source, target, { dryRun = false } = {}) {
   const root = canonicalRoot(target);
   safePath(root);
   if (root === canonicalRoot(source)) throw new Error('Cannot uninstall inside FlutterCrew source workspace.');
-  if (!regular(root, MANIFEST)) {
+  if (!regular(root, MANIFEST) && !regular(root, LEGACY_MANIFEST)) {
     console.log('No installation manifest found; nothing removed. Legacy files/backups require manual review.');
     return;
   }
   const manifest = readManifest(root);
+  const migrate = prepareMigration(root, manifest);
   const actions = [];
   for (const [relative, entry] of Object.entries(manifest.files)) {
     const file = path.join(root, relative);
     const current = stat(file) ? fs.readFileSync(file) : null;
     const backup = entry.backup;
-    if (current && hash(current) !== entry.hash) {
+    if (relative === '.gitignore' && current && hash(current) !== entry.hash) {
       console.log(`Retained modified file and backup: ${relative}; recover using ${MANIFEST}.`);
       continue;
     }
-    if (backup && (!stat(path.join(root, backup.path)) ||
-        hash(fs.readFileSync(path.join(root, backup.path))) !== backup.hash)) {
+    const sourcePath = migrate.sources?.get(backup?.path) || backup?.path;
+    if (backup && (!stat(path.join(root, sourcePath)) ||
+        hash(fs.readFileSync(path.join(root, sourcePath))) !== backup.hash)) {
       console.log(`Retained ${relative}: backup missing or modified (${backup.path}); review manually.`);
       continue;
     }
@@ -214,6 +338,16 @@ function uninstall(source, target, { dryRun = false } = {}) {
   }
   const unresolved = actions.length < Object.keys(manifest.files).length;
   const evidenceRemains = Boolean(stat(safePath(root, '.fluttercrew')));
+  let privacyUpdate = null;
+  if (migrate.sources && (unresolved || evidenceRemains)) {
+    const ignore = regular(root, '.gitignore') ? fs.readFileSync(path.join(root, '.gitignore'), 'utf8') : '';
+    if (!ignore.split(/\r?\n/).includes(`${INSTALLER_DIR}/`)) {
+      if (!manifest.files['.gitignore'] || hash(Buffer.from(ignore)) !== manifest.files['.gitignore'].hash) {
+        throw new Error(`Add ${INSTALLER_DIR}/ to .gitignore before migrating retained recovery files. Nothing was changed.`);
+      }
+      privacyUpdate = `${ignore}${ignore && !ignore.endsWith('\n') ? '\n' : ''}${INSTALLER_DIR}/\n`;
+    }
+  }
   if (unresolved || evidenceRemains) {
     const ignoreIndex = actions.findIndex((action) => action.relative === '.gitignore');
     if (ignoreIndex !== -1) {
@@ -223,12 +357,20 @@ function uninstall(source, target, { dryRun = false } = {}) {
   }
   console.log(`${dryRun ? 'Dry run: would restore/remove' : 'Restoring/removing'} ${actions.length} owned file(s).`);
   if (dryRun) {
+    migrate(true);
+    if (privacyUpdate !== null) console.log(`  UPDATE .gitignore to protect ${INSTALLER_DIR}/`);
     for (const { relative, backup } of actions) {
       console.log(`  ${backup ? 'RESTORE' : 'REMOVE'} ${relative}${backup ? ` <- ${backup.path}` : ''}`);
       if (backup) console.log(`  CONSUME unchanged owned backup ${backup.path}`);
     }
     console.log(`  ${actions.length === Object.keys(manifest.files).length ? 'REMOVE' : 'RETAIN/UPDATE'} ${MANIFEST}`);
     return;
+  }
+  migrate(false);
+  if (privacyUpdate !== null) {
+    fs.writeFileSync(path.join(root, '.gitignore'), privacyUpdate);
+    manifest.files['.gitignore'].hash = hash(Buffer.from(privacyUpdate));
+    saveManifest(root, manifest);
   }
   for (const { relative, backup } of actions) {
     const file = path.join(root, relative);
@@ -255,8 +397,9 @@ function uninstall(source, target, { dryRun = false } = {}) {
     console.log(`Partial uninstall: retained changed files/backups and ${MANIFEST}. No run evidence was removed.`);
   } else {
     fs.unlinkSync(path.join(root, MANIFEST));
-    console.log('Uninstalled owned files. Custom files, unrelated backups and .fluttercrew run evidence were not removed.');
+    console.log(`Uninstalled FlutterCrew files. Kept custom files, unrelated backups and ${PRESERVED.join(', ')}.`);
   }
+  pruneRecoveryDirectories(root);
 }
 
 module.exports = { install, uninstall, safePath };

@@ -63,11 +63,11 @@ ON public.orders FOR INSERT
 WITH CHECK ((select auth.uid()) = user_id);
 ```
 
-## 3. Remote DataSource Implementation in Flutter
+## 3. Supabase Service Implementation in Flutter
 
 ```dart
-class SupabaseOrderRemoteDataSource {
-  const SupabaseOrderRemoteDataSource(this._client);
+class SupabaseOrderService {
+  const SupabaseOrderService(this._client);
   final SupabaseClient _client;
 
   Future<List<OrderDto>> fetchUserOrders() async {

@@ -2,14 +2,12 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { TRACE_KINDS } = require('../constants');
+const { TRACE_KINDS, DRAFT_MARKER } = require('../constants');
 const { hashFile, listFiles, read, resolveProjectFile, writeFileAtomic, writeJsonAtomic } = require('../fsutil');
 const { validateTrace } = require('../spec');
 const { snapshot, requirementSnapshot, specStatus, buildReport, criteriaFor } = require('../report');
 const { gitDirty } = require('../modeguard');
 const { parseArgs, listOption } = require('./args');
-
-const DRAFT_MARKER = 'FLUTTERCREW-DRAFT';
 
 /** Record a per-requirement trace: links to real implementation/test/evidence files. */
 function trace(ctx, args) {

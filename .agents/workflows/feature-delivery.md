@@ -61,8 +61,9 @@ observed. Keep progress concise rather than printing the whole pipeline every tu
 
 ## Phase 2 — Architecture, Spec & Backend Contracts
 
-- Follow `spec-driven-delivery.md`: Planner and Architect extract requirements into stable IDs (`REQ-001`, `REQ-002`, ...), original brief references, and observable acceptance criteria.
-- Architect selects MVVM boundaries (`models/`, `services/`, `viewmodels/`, `views/`).
+- Follow `spec-driven-delivery.md`: Planner and Architect extract requirements into stable IDs (prefer feature-prefixed IDs such as `AUTH-001`), a `feature` slug, original brief references, and Given/When/Then acceptance criteria.
+- Read `docs/features/` first (if present) to understand existing behavior, reuse IDs when changing an existing requirement and avoid IDs already owned by another feature.
+- Architect selects feature-first BLoC boundaries (`models/`, `services/`, `bloc/`, `views/`), or follows the project's existing architecture if one is established.
 - Define backend contracts (Firestore typed converters & security rules or Supabase schema & RLS policies).
 - Scope contracts to actual capabilities: Auth-only does not require an unused
   Firestore database or Supabase application-table migration. Firestore and
@@ -86,8 +87,10 @@ observed. Keep progress concise rather than printing the whole pipeline every tu
 
 ## Phase 4 — Implementation
 
-- Implementation-first: implement features directly across `models/`, `services/`,
-  `viewmodels/`, and `views/` end to end, then immediately execute tests.
+- Implementation-first for features and bug fixes: edit production code before
+  writing or updating tests across `models/`, `services/`, `bloc/`, and `views/`,
+  then immediately execute the relevant tests.
+  Existing tests may be run unchanged during diagnosis.
 - Use small widgets, semantic labels, accessible contrast, >=48 logical-pixel touch targets, and responsive layouts.
 - Handle complete loading, empty, offline, validation, retry, and error states.
 - Record each REQ's implementation with
@@ -103,8 +106,8 @@ observed. Keep progress concise rather than printing the whole pipeline every tu
 - Immediately after implementation, write and execute appropriate unit/state and
   widget tests (`test/features/...`). Use existing `flutter_test`/`test`;
   `bloc_test` only for BLoC/Cubit, `mocktail` only when mocks help. Neither is
-  mandatory for non-bloc or trivial tests. For a bug regression, the explicit
-  RED-GREEN-REFACTOR exception reproduces the failing behavior before the fix.
+  mandatory for non-bloc or trivial tests. For bug fixes, add or update regression
+  tests after the production fix, then execute them; no test-first exception.
 - Cover business logic, edge cases, failure transitions, and mock external services.
 - Record traceability for each requirement using: `node .agents/runtime/crew.js trace <REQ-ID> <trace.json>`.
 - Track testing work with `task REQ-001 testing in_progress "<work>"` and
@@ -150,6 +153,15 @@ For each criterion below, write a non-empty evidence report under
 Attestations record file hashes, not truth. The reviewer must examine content;
 never register a checklist of unexecuted steps as passing evidence. Source changes
 invalidate verification and attestations. Run gates and reviews again after fixes.
+
+Update the living feature catalog once every ID passes:
+`node .agents/runtime/crew.js feature sync`. It writes `docs/features/catalog.json`,
+the `docs/features/README.md` index and the generated requirements block of each
+touched `docs/features/<feature>/FEATURE.md`. Fill every `_TODO_` in the narrative
+sections (purpose, current behavior, UI states, technical overview, decisions,
+known limitations) with reviewed facts and delete the `FLUTTERCREW-DRAFT` line.
+A changed requirement description or acceptance criterion re-adds that line.
+`finish` rejects an out-of-date catalog or a draft feature page. Commit `docs/features/`.
 
 Finally run `node .agents/runtime/crew.js finish`. It rejects pending/blocked/stale
 requirement IDs even when mechanical checks and global reports pass. Report DONE only if it succeeds

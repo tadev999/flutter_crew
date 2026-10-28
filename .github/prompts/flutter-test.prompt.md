@@ -12,8 +12,10 @@ Generate comprehensive, robust tests for the specified Flutter/Dart code.
 Guidelines:
 1. **Testing Library**: Use existing `flutter_test`/`test`; `bloc_test` only for
    BLoC/Cubit and `mocktail` only when mocks help. Neither is mandatory for
-   non-bloc or trivial tests. Default to implementation-first, immediately tested;
-   for a bug regression use the RED-GREEN-REFACTOR exception before the fix.
+   non-bloc or trivial tests. Use implementation-first for features and bug fixes:
+   edit production code before writing or updating tests, then immediately execute
+   them. Add regression coverage after the production fix; no test-first exception.
+   Existing tests may be run unchanged during diagnosis.
 2. **Structure**: Follow Arrange-Act-Assert (`// Arrange`, `// Act`, `// Assert`).
 3. **Scenarios**:
    - Happy path / normal state transitions.

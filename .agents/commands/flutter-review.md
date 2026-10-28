@@ -8,7 +8,7 @@ Invokes the **flutter-reviewer** agent to perform an audit of recent changes or 
 
 ## Actions Executed
 
-1. Checks layer boundaries (Domain purity, DI).
+1. Checks BLoC boundaries (pure models, UI-free Blocs/Cubits, no service calls in Views, DI).
 2. Audits widget trees for unnecessary rebuilds and missing `const`.
 3. Verifies controller/stream lifecycle disposals.
 4. Checks null-safety idioms and error handling.

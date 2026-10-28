@@ -4,6 +4,7 @@ const path = require('node:path');
 const { BACKENDS } = require('../constants');
 const { hashFile, read, resolveProjectFile } = require('../fsutil');
 const { validateSpec } = require('../spec');
+const { catalogConflicts } = require('../features');
 const { newManifest } = require('../state');
 const { specStatus, buildReport } = require('../report');
 const { archiveRun } = require('../archive');
@@ -54,7 +55,6 @@ function spec(ctx, args) {
   const manifest = store.load();
   const [specPath, changeReport] = parseArgs(args).positional;
   const file = resolveProjectFile(root, specPath);
-  const parsed = validateSpec(JSON.parse(read(file)));
   const digest = hashFile(file);
   const briefHash = hashFile(resolveProjectFile(root, manifest.requirements));
 
@@ -64,6 +64,10 @@ function spec(ctx, args) {
     console.log('Spec baseline unchanged; existing verification preserved.');
     return manifest;
   }
+
+  const parsed = validateSpec(JSON.parse(read(file)));
+  const conflicts = catalogConflicts(root, parsed.requirements);
+  if (conflicts.length) throw new Error(conflicts.join('\n'));
 
   let change = null;
   if (manifest.spec) {

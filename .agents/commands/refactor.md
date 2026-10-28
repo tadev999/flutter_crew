@@ -16,5 +16,5 @@ Invokes the **refactor-cleaner** and **flutter-reviewer** agents.
 ## Usage
 
 ```text
-User: /refactor Simplify lib/features/dashboard/presentation/dashboard_page.dart
+User: /refactor Simplify lib/features/dashboard/views/pages/dashboard_page.dart
 ```

@@ -4,7 +4,7 @@ description: Scaffold a brand new Flutter project with interactive choices for t
 
 # /project-init Command
 
-Invokes the **planner** and **architect** agents to initialize a new Flutter application with Clean Architecture and selected backend infrastructure.
+Invokes the **planner** and **architect** agents to initialize a new Flutter application with feature-first BLoC and selected backend infrastructure.
 
 ## Interactive Options Offered
 
@@ -17,7 +17,7 @@ Invokes the **planner** and **architect** agents to initialize a new Flutter app
    - **Firebase**: Configures `firebase_core`, `cloud_firestore`, `firebase_auth`, and generates Zero-Trust `firestore.rules`.
    - **None**: Standalone local application.
 3. **State Management**:
-   - **BLoC / Cubit**: Configures `flutter_bloc` and `bloc_test`.
+   - **BLoC / Cubit** (default): Configures `flutter_bloc` and `bloc_test`.
    - **Riverpod**: Configures `flutter_riverpod`.
    - **Provider**: Configures `provider`.
 

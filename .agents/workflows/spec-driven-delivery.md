@@ -23,14 +23,22 @@ Write a project document such as docs/spec.json using
 .agents/templates/spec.example.json. Keep the source Markdown brief as-is.
 Each requirement has:
 
-- Stable ID (REQ-001, BUG-001, etc.). Do not renumber/reuse IDs to conceal changes.
+- Stable ID (AUTH-001, BUG-001, etc.). Do not renumber/reuse IDs to conceal changes.
+  IDs are unique across the whole app: read `docs/features/catalog.json`, reuse an
+  ID only when changing that same requirement, and prefer feature-prefixed IDs.
+- feature: kebab-case slug (e.g. `auth`, `task-board`) grouping the requirement in
+  the living feature catalog under `docs/features/<feature>/FEATURE.md`.
 - description and source reference to the actual brief/section/paragraph.
-- Non-empty acceptanceCriteria: observable success, failure and relevant edge cases.
+- Non-empty acceptanceCriteria, each written as
+  `Given <context> When <action> Then <observable outcome>` (English keywords;
+  content may be in any language). Cover success, failure and relevant edge cases.
 - verification: automated for business rules, authorization, state and regressions;
   manual may be appropriate for narrowly visual/copy/layout requirements.
 
 Run `node .agents/runtime/crew.js spec docs/spec.json` after review. It records
-the exact spec/brief hashes. An empty/duplicate/malformed spec is rejected.
+the exact spec/brief hashes. An empty/duplicate/malformed spec, a missing feature
+slug, a criterion not in Given/When/Then form or an ID owned by another feature in
+the catalog is rejected.
 Existing v1 runs remain readable but cannot verify/finish without a spec baseline;
 baselining upgrades state to schema v2 and clears old gates/attestations.
 
@@ -44,9 +52,11 @@ references really map to the brief; file existence alone is not coverage.
 
 ## 3. Implement and trace each requirement
 
-Plan tasks by requirement ID and vertical slice. Default to implementation-first,
-immediately followed by executed unit/state/widget tests. For a bug regression,
-use the RED-GREEN-REFACTOR exception: reproduce failure, fix, then refactor.
+Plan tasks by requirement ID and vertical slice. Use implementation-first for
+features and bug fixes: edit production code before writing or updating tests,
+then immediately execute unit/state/widget tests. Add regression coverage after
+the production fix; no test-first exception. Existing tests may be run unchanged
+during diagnosis.
 Business logic/state/security always need automated tests, not necessarily a
 tests-first ceremony. Use `bloc_test` only for BLoC/Cubit and `mocktail` only when
 mocks help; existing test tools suffice for non-bloc or trivial tests.
@@ -111,7 +121,9 @@ reuse current evidence instead of repeating planning or verification unnecessari
 Independently check the brief-to-spec completeness, then ID-to-code/test/evidence
 coverage. A generic backend report cannot substitute for an omitted requirement.
 Run `verify` and review current traces, register the five global attestations with
-`accept`, then `finish`. Finish requires EVERY specified ID passed with current, unchanged files
+`accept`, then `finish`. Before `finish`, run `feature sync` and complete the
+narrative of each touched `docs/features/<feature>/FEATURE.md`; finish rejects an
+out-of-date catalog or a draft page. Finish requires EVERY specified ID passed with current, unchanged files
 in addition to the existing mechanical/backend/global gates.
 DONE is local delivery status, not production certification or proof of perfect
 coverage. Never alter scope, lower tests or falsify evidence to make gates pass.

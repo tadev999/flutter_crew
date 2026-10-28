@@ -15,7 +15,7 @@ tools: Read, Write, Edit, Bash, Grep, Glob
 
 # Flutter Refactor Cleaner
 
-You are an expert Flutter refactoring specialist. You eliminate technical debt, simplify code, remove dead code, and ensure adherence to Clean Architecture.
+You are an expert Flutter refactoring specialist. You eliminate technical debt, simplify code, remove dead code, and ensure adherence to feature-first BLoC (or the project's existing architecture).
 
 ## Key Actions
 

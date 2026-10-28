@@ -32,7 +32,8 @@ No arguments: install in a Flutter project, otherwise start interactive init.
 Existing VS Code settings/tasks/extensions are preserved, including JSONC.
 Uninstall restores only manifest-owned unchanged files; custom files, edited
 files, unrelated backups and .fluttercrew run evidence are never deleted.
-The ownership manifest is .fluttercrew-install.json, separate from run state.
+Installer metadata is in .fluttercrew-installer/manifest.json; originals are
+stored in .fluttercrew-installer/backups/, separate from run state.
 Owned .gitignore privacy rules remain while recovery files or evidence remain.
 Partial uninstall/no-manifest notices return success for compatibility, not proof
 of full removal. Review retained paths; resolve conflicts and rerun uninstall.
@@ -78,7 +79,9 @@ function doctor(target = '.', { execute = diagnosticTool } = {}) {
   if (!hasFile('pubspec.yaml')) issue('Missing pubspec.yaml. Run doctor in a Flutter project or run flutter create <name>.');
   if (!hasFile('lib/main.dart')) issue('Missing lib/main.dart. Restore your Flutter application entry point.');
   if (!hasFile('.agents/runtime/crew.js')) issue('Runtime not installed. Run flutter-crew install in this project.');
-  if (!hasFile('.fluttercrew-install.json')) issue('No installer ownership manifest; legacy files will not be removed automatically.');
+  if (!hasFile('.fluttercrew-installer/manifest.json') && !hasFile('.fluttercrew-install.json')) {
+    issue('No installer ownership manifest; legacy files will not be removed automatically.');
+  }
   if (hasFile('pubspec.yaml')) {
     const pubspec = fs.readFileSync(path.join(root, 'pubspec.yaml'), 'utf8');
     const backends = [];
@@ -155,7 +158,7 @@ async function runInteractiveInit() {
     execFileSync('flutter', ['pub', 'add', ...deps], { cwd: projectDir, stdio: 'inherit' });
     execFileSync('flutter', ['pub', 'add', '--dev', ...devDeps], { cwd: projectDir, stdio: 'inherit' });
     const folders = ['lib/core/constants', 'lib/core/errors', 'lib/core/theme', 'lib/core/utils',
-      'lib/core/services', ...['models', 'services', 'viewmodels', 'views/pages', 'views/widgets']
+      'lib/core/services', ...['models', 'services', 'bloc', 'views/pages', 'views/widgets']
         .map((name) => `lib/features/home/${name}`)];
     if (backend === '1') folders.push('supabase/migrations');
     for (const folder of folders) fs.mkdirSync(safePath(projectDir, folder), { recursive: true });

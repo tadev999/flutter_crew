@@ -79,7 +79,7 @@ test('IDE adapters stay thin and defer ordering and safety to one canonical cont
   for (const protectedPath of ['.agents/**', '.fluttercrew/**', '.vscode/**',
     '.github/agents/**', '.github/prompts/**', 'AGENTS.md', 'CLAUDE.md',
     'GEMINI.md', '.cursorrules', '.github/copilot-instructions.md',
-    '.fluttercrew-install.json', '*.fluttercrew-*.bak']) {
+    '.fluttercrew-installer/**', '.fluttercrew-install.json', '*.fluttercrew-*.bak']) {
     assert.ok(canonical.includes(protectedPath), protectedPath);
   }
   assert.match(normalize(canonical), /does NOT apply when maintaining the FlutterCrew source repository/);
@@ -142,16 +142,19 @@ test('delivery closes only after verification, accepted evidence and current tra
   assert.match(spec, /invalidates approval and task records/);
 });
 
-test('testing guidance agrees on implementation-first and regression RED-GREEN exception', () => {
+test('testing guidance requires production edits before test edits for features and bug fixes', () => {
   for (const name of ['AGENTS.md', '.agents/workflows/feature-delivery.md',
     '.agents/workflows/spec-driven-delivery.md', '.agents/agents/tdd-guide.md',
     '.agents/agents/planner.md', '.agents/skills/flutter-testing/SKILL.md',
     '.github/agents/crew-builder.agent.md', '.github/prompts/flutter-test.prompt.md',
-    '.github/prompts/plan.prompt.md']) {
+    '.github/prompts/plan.prompt.md', '.agents/commands/tdd.md']) {
     const text = normalize(read(name));
     assert.match(text, /implementation-first/i, name);
-    assert.match(text, /bug regression.*RED-GREEN-REFACTOR/i, name);
-    assert.doesNotMatch(text, /Tests first for business|TDD is expected|lightweight auto-baseline/i, name);
+    assert.match(text, /implementation-first for features and bug fixes/i, name);
+    assert.match(text, /edit production code before writing or updating tests/i, name);
+    assert.match(text, /regression coverage after the (?:production )?fix|regression tests after the production fix|regression coverage for bug fixes/i, name);
+    assert.match(text, /no test-first exception/i, name);
+    assert.doesNotMatch(text, /RED-GREEN-REFACTOR|failing tests first|Tests first for business|TDD is expected|lightweight auto-baseline/i, name);
   }
   for (const name of ['AGENTS.md', '.agents/workflows/feature-delivery.md',
     '.agents/workflows/spec-driven-delivery.md', '.agents/skills/flutter-testing/SKILL.md',
@@ -160,6 +163,12 @@ test('testing guidance agrees on implementation-first and regression RED-GREEN e
     const text = normalize(read(name));
     assert.match(text, /`bloc_test` only for BLoC\/Cubit/, name);
     assert.match(text, /`mocktail` only when mocks help/, name);
+  }
+  for (const name of ['AGENTS.md', '.agents/workflows/feature-delivery.md',
+    '.agents/workflows/spec-driven-delivery.md', '.agents/skills/flutter-testing/SKILL.md',
+    '.agents/agents/tdd-guide.md', '.agents/commands/tdd.md',
+    '.github/agents/crew-builder.agent.md', '.github/prompts/flutter-test.prompt.md']) {
+    assert.match(normalize(read(name)), /Existing tests may be run unchanged during diagnosis/i, name);
   }
 });
 

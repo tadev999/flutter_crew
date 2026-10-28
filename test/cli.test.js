@@ -4,9 +4,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const cli = path.resolve(__dirname, '../bin/cli.js');
-const manifestName = '.fluttercrew-install.json';
+const manifestName = '.fluttercrew-installer/manifest.json';
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(__dirname, '.cli-fixture-'));
@@ -50,6 +51,130 @@ function snapshot(root) {
   return result;
 }
 
+function legacyInstallation(p) {
+  const manifest = JSON.parse(p.read(manifestName));
+  manifest.version = 1;
+  for (const [relative, entry] of Object.entries(manifest.files)) {
+    if (!entry.backup) continue;
+    const old = entry.backup.path;
+    entry.backup.path = `${relative}.fluttercrew-123-fixture.bak`;
+    fs.renameSync(path.join(p.root, old), path.join(p.root, entry.backup.path));
+  }
+  const ignore = p.read('.gitignore').replace(/^\.fluttercrew-installer\/\r?\n/gm, '');
+  p.write('.gitignore', ignore);
+  manifest.files['.gitignore'].hash = crypto.createHash('sha256').update(ignore).digest('hex');
+  p.write('.fluttercrew-install.json', JSON.stringify(manifest));
+  fs.rmSync(path.join(p.root, '.fluttercrew-installer'), { recursive: true });
+  return manifest;
+}
+
+test('legacy migration centralizes originals, preserves modes and is idempotent', (t) => {
+  const p = fixture(t);
+  p.write('AGENTS.md', 'original instructions');
+  p.write('.agents/runtime/crew.js', 'original runtime');
+  fs.chmodSync(path.join(p.root, 'AGENTS.md'), 0o640);
+  success(p.run('install'));
+  const legacy = legacyInstallation(p);
+  p.write('unrelated.fluttercrew-123.bak', 'unrelated');
+  const before = snapshot(p.root);
+  const preview = p.run('install', '--dry-run');
+  success(preview);
+  assert.match(preview.stdout, /Would migrate legacy installer/);
+  assert.deepEqual(snapshot(p.root), before);
+  success(p.run('install'));
+  const manifest = JSON.parse(p.read(manifestName));
+  assert.equal(manifest.version, 2);
+  assert.equal(p.exists('.fluttercrew-install.json'), false);
+  for (const [relative, entry] of Object.entries(legacy.files)) {
+    if (!entry.backup) continue;
+    assert.equal(p.exists(entry.backup.path), false);
+    assert.equal(manifest.files[relative].backup.path, `.fluttercrew-installer/backups/${relative}`);
+  }
+  assert.equal(p.read(manifest.files['AGENTS.md'].backup.path), 'original instructions');
+  const migrated = snapshot(p.root);
+  success(p.run('install'));
+  assert.deepEqual(snapshot(p.root), migrated);
+  success(p.run('uninstall'));
+  assert.equal(p.read('AGENTS.md'), 'original instructions');
+  assert.equal(fs.statSync(path.join(p.root, 'AGENTS.md')).mode & 0o777, 0o640);
+  assert.equal(p.read('.agents/runtime/crew.js'), 'original runtime');
+  assert.equal(p.read('unrelated.fluttercrew-123.bak'), 'unrelated');
+  assert.equal(p.exists('.fluttercrew-installer'), false);
+});
+
+test('legacy uninstall migrates and restores original files without an update', (t) => {
+  const p = fixture(t);
+  p.write('AGENTS.md', 'original');
+  success(p.run('install'));
+  legacyInstallation(p);
+  success(p.run('uninstall'));
+  assert.equal(p.read('AGENTS.md'), 'original');
+  assert.equal(p.exists(manifestName), false);
+  assert.equal(p.exists('.fluttercrew-install.json'), false);
+});
+
+test('legacy uninstall keeps retained installer recovery files gitignored with evidence', (t) => {
+  const p = fixture(t);
+  success(spawnSync('git', ['init', '--quiet'], { cwd: p.root, encoding: 'utf8' }));
+  p.write('.gitignore', '# original\n');
+  success(p.run('install'));
+  legacyInstallation(p);
+  p.write('.fluttercrew/run.json', '{"status":"active"}');
+  const before = snapshot(p.root);
+  success(p.run('uninstall', '--dry-run'));
+  assert.deepEqual(snapshot(p.root), before);
+  success(p.run('uninstall'));
+  success(spawnSync('git', ['check-ignore', '--', manifestName], { cwd: p.root, encoding: 'utf8' }));
+  assert.equal(p.read('.fluttercrew/run.json'), '{"status":"active"}');
+  fs.unlinkSync(path.join(p.root, '.fluttercrew/run.json'));
+  fs.rmdirSync(path.join(p.root, '.fluttercrew'));
+  success(p.run('uninstall'));
+  assert.equal(p.read('.gitignore'), '# original\n');
+  assert.equal(p.exists('.fluttercrew-installer'), false);
+});
+
+test('migration restores originals for retired files and never ships sidecar backups', (t) => {
+  const p = fixture(t);
+  const { install } = require('../bin/installer');
+  p.write('distribution/AGENTS.md', 'package');
+  p.write('distribution/.agents/old.md', 'old package guide');
+  p.write('project/.agents/old.md', 'original guide');
+  install(path.join(p.root, 'distribution'), path.join(p.root, 'project'));
+  const target = {
+    root: path.join(p.root, 'project'),
+    read: (name) => p.read(`project/${name}`),
+    write: (name, value) => p.write(`project/${name}`, value),
+  };
+  legacyInstallation(target);
+  fs.unlinkSync(path.join(p.root, 'distribution/.agents/old.md'));
+  p.write('distribution/.agents/runtime/crew.js.fluttercrew-123.bak', 'private backup');
+  install(path.join(p.root, 'distribution'), target.root);
+  assert.equal(p.read('project/.agents/old.md'), 'original guide');
+  assert.equal(p.exists('project/.agents/runtime/crew.js.fluttercrew-123.bak'), false);
+});
+
+test('legacy migration rejects damaged backups and destination conflicts without writes', (t) => {
+  for (const problem of ['missing', 'modified', 'destination', 'symlink']) {
+    const p = fixture(t);
+    p.write('AGENTS.md', 'original');
+    success(p.run('install'));
+    const legacy = legacyInstallation(p);
+    const backup = legacy.files['AGENTS.md'].backup.path;
+    if (problem === 'missing') fs.unlinkSync(path.join(p.root, backup));
+    if (problem === 'modified') p.write(backup, 'modified');
+    if (problem === 'destination') p.write('.fluttercrew-installer/backups/AGENTS.md', 'conflict');
+    if (problem === 'symlink') {
+      fs.mkdirSync(path.join(p.root, 'outside'));
+      fs.symlinkSync(path.join(p.root, 'outside'), path.join(p.root, '.fluttercrew-installer'));
+    }
+    const before = snapshot(p.root);
+    for (const command of ['install', 'uninstall']) {
+      assert.equal(p.run(command).status, 1, `${command}: ${problem}`);
+      assert.deepEqual(snapshot(p.root), before);
+    }
+  }
+});
+
 test('help, version and safe import do not write or initialize', (t) => {
   const p = fixture(t);
   const before = snapshot(p.root);
@@ -85,9 +210,9 @@ test('dry-run install, legacy path and uninstall never write', (t) => {
   const preview = p.run('install', '.', '--dry-run');
   success(preview);
   assert.match(preview.stdout, /REPLACE AGENTS\.md/);
-  assert.match(preview.stdout, /BACK UP AGENTS\.md -> AGENTS\.md\.fluttercrew-\d+-[a-f0-9]+\.bak/);
+  assert.match(preview.stdout, /BACK UP AGENTS\.md -> \.fluttercrew-installer\/backups\/AGENTS\.md/);
   assert.match(preview.stdout, /ADD \.agents\/runtime\/crew\.js/);
-  assert.match(preview.stdout, /WRITE \.fluttercrew-install\.json/);
+  assert.match(preview.stdout, /WRITE \.fluttercrew-installer\/manifest\.json/);
   success(p.run('.', '--dry-run'));
   success(p.run('install', 'new-project', '--dry-run'));
   assert.deepEqual(snapshot(p.root), before);
@@ -95,17 +220,18 @@ test('dry-run install, legacy path and uninstall never write', (t) => {
   const installed = snapshot(p.root);
   const removal = p.run('uninstall', '--dry-run');
   success(removal);
-  assert.match(removal.stdout, /RESTORE AGENTS\.md <- AGENTS\.md\.fluttercrew-/);
+  assert.match(removal.stdout, /RESTORE AGENTS\.md <- \.fluttercrew-installer\/backups\/AGENTS\.md/);
   assert.match(removal.stdout, /REMOVE \.agents\/runtime\/crew\.js/);
-  assert.match(removal.stdout, /CONSUME unchanged owned backup AGENTS\.md\.fluttercrew-/);
-  assert.match(removal.stdout, /REMOVE \.fluttercrew-install\.json/);
+  assert.match(removal.stdout, /CONSUME unchanged owned backup \.fluttercrew-installer\/backups\/AGENTS\.md/);
+  assert.match(removal.stdout, /REMOVE \.fluttercrew-installer\/manifest\.json/);
   assert.deepEqual(snapshot(p.root), installed);
 });
 
-test('custom agents/prompts/workflows and JSONC configuration survive install/uninstall', (t) => {
+test('team files survive install/uninstall; preexisting VS Code config is backed up, replaced and restored', (t) => {
   const p = fixture(t);
   const originals = {
     '.agents/skills/custom/SKILL.md': 'custom skill',
+    '.agents/local/rules.md': 'team rules',
     '.github/prompts/my.prompt.md': 'custom prompt',
     '.github/agents/my.agent.md': 'custom agent',
     '.github/workflows/custom.yml': 'user workflow',
@@ -114,14 +240,20 @@ test('custom agents/prompts/workflows and JSONC configuration survive install/un
     '.vscode/extensions.json': '// extensions\n{"recommendations": ["custom.extension"],}\n',
     '.vscode/settings.json.bak': 'unrelated backup',
     'unrelated.fluttercrew-123.bak': 'never sweep backups',
+    'docs/features/core/FEATURE.md': 'feature docs',
+    'docs/fluttercrew/spec.json': '{}',
     '.fluttercrew/run.json': '{"status":"active","evidence":"untouched"}',
     '.fluttercrew/evidence/custom.log': 'recorded evidence',
   };
+  const configs = ['.vscode/settings.json', '.vscode/tasks.json', '.vscode/extensions.json'];
   for (const [name, contents] of Object.entries(originals)) p.write(name, contents);
   const result = p.run('install');
   success(result);
-  assert.match(result.stdout, /Preserved existing .vscode\/settings.json unchanged/);
-  for (const [name, contents] of Object.entries(originals)) assert.equal(p.read(name), contents, name);
+  assert.match(result.stdout, /Saved backup: \.fluttercrew-installer\/backups\/\.vscode\/settings\.json/);
+  for (const [name, contents] of Object.entries(originals)) {
+    if (configs.includes(name)) assert.notEqual(p.read(name), contents, name);
+    else assert.equal(p.read(name), contents, name);
+  }
   assert.equal(p.exists('.github/workflows/ci.yml'), false);
   success(p.run('uninstall'));
   for (const [name, contents] of Object.entries(originals)) assert.equal(p.read(name), contents, name);
@@ -145,7 +277,7 @@ test('colliding files restore original contents/modes and installation owns only
   const originalMode = fs.statSync(path.join(p.root, 'AGENTS.md')).mode & 0o777;
   success(p.run('install'));
   const manifest = JSON.parse(p.read(manifestName));
-  assert.equal(manifest.version, 1);
+  assert.equal(manifest.version, 2);
   assert.equal(p.exists('.fluttercrew'), false);
   const backup = manifest.files['AGENTS.md'].backup;
   assert.equal(backup.mode, originalMode);
@@ -177,7 +309,7 @@ test('git ignores ownership manifest, recovery backups and evidence with reversi
   success(p.run('install'));
   const manifest = JSON.parse(p.read(manifestName));
   const backup = manifest.files['AGENTS.md'].backup.path;
-  assert.match(backup, /^AGENTS\.md\.fluttercrew-\d+-[a-f0-9]+\.bak$/);
+  assert.equal(backup, '.fluttercrew-installer/backups/AGENTS.md');
   p.write('.fluttercrew/evidence/private.log', 'private evidence');
   const ignored = [manifestName, backup, manifest.files['.gitignore'].backup.path, '.fluttercrew/evidence/private.log'];
   const result = spawnSync('git', ['check-ignore', '--', ...ignored], { cwd: p.root, encoding: 'utf8' });
@@ -193,22 +325,16 @@ test('git ignores ownership manifest, recovery backups and evidence with reversi
   assert.equal(p.read('.gitignore'), originalIgnore);
 });
 
-test('partial uninstall keeps privacy ignores until retained files are resolved', (t) => {
+test('uninstall removes locally edited FlutterCrew files and restores the original', (t) => {
   const p = fixture(t);
   p.write('.gitignore', '# original\n');
   p.write('AGENTS.md', 'original instructions');
   success(p.run('install'));
-  const manifest = JSON.parse(p.read(manifestName));
-  const installed = p.read('AGENTS.md');
   p.write('AGENTS.md', 'developer edits');
-  success(p.run('uninstall'));
-  const backup = manifest.files['AGENTS.md'].backup.path;
-  assert.match(p.read('.gitignore'), /\*\.fluttercrew-\*\.bak/);
-  assert.equal(p.exists(backup), true);
-  assert.equal(p.exists(manifestName), true);
-  p.write('AGENTS.md', installed);
+  p.write('.agents/runtime/crew.js', 'edited runtime');
   success(p.run('uninstall'));
   assert.equal(p.read('AGENTS.md'), 'original instructions');
+  assert.equal(p.exists('.agents'), false);
   assert.equal(p.read('.gitignore'), '# original\n');
   assert.equal(p.exists(manifestName), false);
 });
@@ -226,7 +352,7 @@ test('reinstall refuses missing privacy rules in edited gitignore before creatin
   assert.deepEqual(snapshot(p.root), before);
 });
 
-test('repeat install is stable, keeps first backups, and local edits survive update/uninstall', (t) => {
+test('repeat install is stable, keeps first backups, and update overwrites local edits', (t) => {
   const p = fixture(t);
   p.write('AGENTS.md', 'original');
   success(p.run('install'));
@@ -235,22 +361,52 @@ test('repeat install is stable, keeps first backups, and local edits survive upd
   assert.deepEqual(snapshot(p.root), once);
   p.write('AGENTS.md', 'locally edited instructions');
   p.write('.agents/runtime/crew.js', 'locally edited runtime');
-  p.write('.vscode/tasks.json', 'locally edited tasks');
+  fs.unlinkSync(path.join(p.root, '.vscode/tasks.json'));
   p.write('.gitignore', `${p.read('.gitignore')}local-custom-ignore\n`);
   const manifest = JSON.parse(p.read(manifestName));
-  success(p.run('install'));
-  assert.equal(p.read('AGENTS.md'), 'locally edited instructions');
-  const result = p.run('uninstall');
+  const result = p.run('install');
   success(result);
-  assert.match(result.stdout, /Partial uninstall/);
-  assert.equal(p.read('AGENTS.md'), 'locally edited instructions');
-  assert.equal(p.read('.agents/runtime/crew.js'), 'locally edited runtime');
-  assert.equal(p.read('.vscode/tasks.json'), 'locally edited tasks');
+  assert.match(result.stdout, /Replacing locally modified FlutterCrew file: AGENTS\.md/);
+  for (const name of ['AGENTS.md', '.agents/runtime/crew.js', '.vscode/tasks.json']) {
+    assert.equal(p.read(name), Buffer.from(once[name], 'base64').toString('utf8'), name);
+  }
   assert.match(p.read('.gitignore'), /local-custom-ignore/);
   assert.equal(p.read(manifest.files['AGENTS.md'].backup.path), 'original');
-  const retained = snapshot(p.root);
   success(p.run('uninstall'));
-  assert.deepEqual(snapshot(p.root), retained);
+  assert.equal(p.read('AGENTS.md'), 'original');
+  assert.equal(p.exists('.agents'), false);
+  assert.match(p.read('.gitignore'), /local-custom-ignore/);
+});
+
+test('updates delete files no longer shipped, restore their originals and never touch project docs', (t) => {
+  const p = fixture(t);
+  const { install, uninstall } = require('../bin/installer');
+  const source = path.join(p.root, 'distribution');
+  const target = path.join(p.root, 'project');
+  p.write('distribution/AGENTS.md', 'package v1');
+  p.write('distribution/GEMINI.md', 'gemini v1');
+  p.write('distribution/.agents/skills/old-skill/SKILL.md', 'old skill');
+  p.write('distribution/.agents/runtime/crew.js', 'runtime v1');
+  p.write('project/GEMINI.md', 'team gemini');
+  const kept = ['docs/features/README.md', 'docs/fluttercrew/request.md', '.fluttercrew/run.json', '.agents/local/rules.md'];
+  for (const name of kept) p.write(`project/${name}`, `keep ${name}`);
+  install(source, target);
+  fs.writeFileSync(path.join(target, '.agents/skills/old-skill/SKILL.md'), 'local edit');
+
+  fs.rmSync(path.join(source, 'GEMINI.md'));
+  fs.rmSync(path.join(source, '.agents/skills'), { recursive: true });
+  p.write('distribution/.agents/runtime/crew.js', 'runtime v2');
+  install(source, target);
+  const read = (name) => fs.readFileSync(path.join(target, name), 'utf8');
+  assert.equal(read('GEMINI.md'), 'team gemini');
+  assert.equal(fs.existsSync(path.join(target, '.agents/skills')), false);
+  assert.equal(read('.agents/runtime/crew.js'), 'runtime v2');
+  assert.deepEqual(Object.keys(JSON.parse(read(manifestName)).files).sort(),
+    ['.agents/runtime/crew.js', '.gitignore', 'AGENTS.md']);
+  for (const name of kept) assert.equal(read(name), `keep ${name}`, name);
+  uninstall(source, target);
+  assert.equal(fs.existsSync(path.join(target, '.agents/runtime')), false);
+  for (const name of kept) assert.equal(read(name), `keep ${name}`, name);
 });
 
 test('package updates replace only unchanged owned content and restore the first original', (t) => {
@@ -299,7 +455,9 @@ test('legacy uninstall without ownership does not guess or sweep files/backups/r
 });
 
 test('symlink directory/file/manifest/backup escapes are rejected before any mutation', (t) => {
-  for (const relative of ['.agents', 'AGENTS.md', '.fluttercrew-install.json', '.vscode/settings.json']) {
+  for (const relative of ['.agents', 'AGENTS.md', '.fluttercrew-install.json',
+    '.fluttercrew-installer', manifestName, '.fluttercrew-installer/backups',
+    '.vscode/settings.json']) {
     const p = fixture(t);
     const outside = path.join(p.root, 'outside');
     fs.mkdirSync(outside);

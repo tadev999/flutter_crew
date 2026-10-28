@@ -36,14 +36,30 @@ Raw AI assistants generate code inside a black box—deciding architecture unila
       ↓
 [3. Dev Approval 👤] 🛑 You review & approve spec BEFORE any code is touched
       ↓
-[4. Implementation]  🛠️ Implements Model, ViewModel, and View cleanly
+[4. Implementation]  🛠️ Implements Model, Service, Bloc and View cleanly
       ↓
 [5. Tests]           🧪 Auto-writes & runs tests mapped to each REQ-xxx
       ↓
 [6. Quality Gates]   🛡️ Enforces `dart format` & `flutter analyze --fatal-infos`
       ↓
 [7. Done]            🚀 Evidence saved, marked complete on Live Dashboard
+      ↓
+[8. Feature catalog] 📚 docs/features/<feature>/FEATURE.md updated for devs & agents
 ```
+
+### Feature catalog
+
+Each requirement belongs to a `feature` and uses Given/When/Then acceptance criteria.
+Before `finish`, run `node .agents/runtime/crew.js feature sync` to update the
+committed, living documentation in `docs/features/`:
+
+- `README.md`: index of every feature with requirement counts and last update.
+- `<feature>/FEATURE.md`: reviewed narrative (purpose, behavior, UI states,
+  technical overview, decisions, limitations) plus a generated requirements block
+  with acceptance criteria and linked code/tests.
+- `catalog.json`: machine-readable requirements accumulated across runs.
+
+`finish` is blocked while the catalog is out of date or a touched page is still a draft.
 
 ---
 
@@ -97,29 +113,39 @@ Preview changes before installing:
 npx flutter-crew install --dry-run
 ```
 
-Installation records which files it owns and keeps recovery information separately
-from delivery runs. Existing VS Code settings, tasks and extension recommendations
-are preserved rather than blindly replaced or merged. Other conflicting files are
-backed up before replacement. Review the install output and keep the installation
-record with the project until uninstall is complete.
+Installation records which files it owns in `.fluttercrew-installer/manifest.json`.
+Original files are stored under `.fluttercrew-installer/backups/`, retaining their
+relative paths rather than scattering `.bak` files among agents and runtime code.
+The installer directory is gitignored and separate from delivery evidence.
+Every
+install or update makes FlutterCrew files match the package exactly:
 
-Uninstall restores tracked originals and removes only unchanged files owned by the
-installation. Team-owned files, files edited after installation, delivery evidence
-and unrelated backups are preserved. Conflicts are reported for manual review.
-For older installations without an ownership record, uninstall refuses destructive
-cleanup rather than guessing which files belong to FlutterCrew.
+- FlutterCrew files (`.agents/**`, shipped `.github/agents` and `.github/prompts`
+  files, `.github/copilot-instructions.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`,
+  `.cursorrules`, `.vscode/*.json`) are overwritten, including local edits.
+  Files shipped by an earlier version but no longer included are deleted.
+- A team file that already existed at one of those paths before the first install
+  is backed up once in `.fluttercrew-installer/backups/` and restored on uninstall.
+- Never touched: `docs/features/`, `docs/fluttercrew/`, `.fluttercrew/`,
+  `.agents/local/`, your own agents/prompts/workflows and application code.
+- `.gitignore` only receives the missing privacy lines; your edits are kept.
 
-To update an existing installation, rerun `npx flutter-crew install`: unchanged
-owned files can be updated while local edits and the original recovery backups
-are retained. A partial uninstall reports remaining conflicts; keep the ownership
-record and backups until those conflicts are resolved. Never delete backups to
-make an uninstall look successful. For legacy installations, review the old
-backups before reinstalling; a new ownership record cannot reconstruct a missing
-pre-install original.
-Privacy ignore rules and their ownership record also remain while delivery
-evidence is present. Partial/no-manifest uninstall currently exits successfully
-for compatibility; always read its retained-path notices rather than treating
-exit code zero as proof that every installed file was removed.
+Put team-specific rules and skills in `.agents/local/`; agents read them and
+updates never overwrite them.
+
+On install/update or uninstall, legacy `.fluttercrew-install.json` manifests and
+their recorded `*.fluttercrew-*.bak` files are migrated automatically. Migration
+checks every backup hash before changing recovery files, preserves original modes,
+and removes old copies only after saving the new manifest. Dry runs preview the
+migration without writing. Missing/modified backups or conflicting manifests stop
+migration for manual review; unrelated backups are never swept or deleted.
+
+Uninstall removes every FlutterCrew file (including locally edited ones) and
+restores the backed-up originals. The preserved paths above stay in place. If a
+backup is missing or was edited, that file is left for manual review. For older
+installations without an ownership record, uninstall refuses destructive cleanup
+rather than guessing which files belong to FlutterCrew. Privacy ignore rules stay
+while `.fluttercrew/` evidence remains; always read the retained-path notices.
 
 Inspect available commands and diagnose your environment:
 
@@ -140,7 +166,7 @@ Advice, review-only and plan-only requests do not start a run, even if they ment
 the product name. A requirements file is optional.
 
 ```text
-FlutterCrew: Build a task manager with Firebase Auth and Firestore. Use Riverpod, owner-only access, and responsive layouts.
+FlutterCrew: Build a task manager with Firebase Auth and Firestore. Use BLoC, owner-only access, and responsive layouts.
 ```
 
 Choose the amount of process appropriate to the task:
@@ -153,8 +179,14 @@ Choose the amount of process appropriate to the task:
 
 These are workflow descriptions, **not CLI profile flags**. Standard delivery does
 not bypass approval, traceability, format/analyze/test gates or applicable backend
-authorization checks. Reuse the project's existing state management and test tools;
-do not introduce BLoC, Riverpod or a mocking library merely to satisfy a template.
+authorization checks. Feature-first BLoC (`models/`, `services/`, `bloc/`, `views/`)
+is the default; if the project already uses another state management solution,
+reuse it, and do not add a mocking library merely to satisfy a template.
+
+For both features and bug fixes, edit production code before writing or updating
+tests, then execute the relevant tests immediately. Bug fixes still require
+regression coverage after the fix; there is no test-first exception. Existing
+tests may be run unchanged during diagnosis.
 
 When blocked, inspect `status` or the dashboard for the cause and next command:
 

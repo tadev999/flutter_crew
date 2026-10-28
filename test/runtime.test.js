@@ -24,9 +24,10 @@ function project(t) {
   write('pubspec.yaml', 'name: fixture\nenvironment:\n  sdk: ^3.0.0\n');
   write('lib/main.dart', 'void main() {}');
   write('test/feature_test.dart', '// Node fixture only; not an executed Flutter test.');
-  const spec = { schemaVersion: 1, requirements: [{ id: 'REQ-001',
+  const spec = { schemaVersion: 1, requirements: [{ id: 'REQ-001', feature: 'core',
     description: 'Implement the requested feature.', source: 'requirements.md: first paragraph',
-    acceptanceCriteria: ['The requested behavior works.'], verification: 'automated' }] };
+    acceptanceCriteria: ['Given a user When they use the feature Then the requested behavior works.'],
+    verification: 'automated' }] };
   const calls = [];
   const execute = (_root, name, executable, args) => {
     calls.push({ name, executable, args });
@@ -46,12 +47,23 @@ function project(t) {
     if (approved) invoke(['approve', 'Node fixture developer decision']);
     return manifest;
   };
+  // Fixture stand-in for the reviewer completing the generated feature pages.
+  const syncFeatures = () => {
+    invoke(['feature', 'sync']);
+    for (const slug of new Set(spec.requirements.map((entry) => entry.feature))) {
+      const doc = path.join(root, `docs/features/${slug}/FEATURE.md`);
+      fs.writeFileSync(doc, fs.readFileSync(doc, 'utf8')
+        .replace(/^<!-- FLUTTERCREW-DRAFT.*\n/gm, '').replaceAll('_TODO_', 'Fixture fact.'));
+    }
+  };
   const trace = (id = 'REQ-001', overrides = {}) => {
     write('.fluttercrew/evidence/feature.md', 'Node fixture result only, not real Flutter/backend evidence.');
     write(`.fluttercrew/traces/${id}.json`, JSON.stringify({ status: 'passed',
       implementation: ['lib/main.dart'], tests: ['test/feature_test.dart'],
       evidence: ['.fluttercrew/evidence/feature.md'], ...overrides }));
-    return invoke(['trace', id, `.fluttercrew/traces/${id}.json`]);
+    const manifest = invoke(['trace', id, `.fluttercrew/traces/${id}.json`]);
+    syncFeatures();
+    return manifest;
   };
   const attest = () => {
     trace();
@@ -60,7 +72,7 @@ function project(t) {
       invoke(['accept', id, `.fluttercrew/evidence/${id}.md`]);
     });
   };
-  return { root, write, invoke, calls, start, attest, trace, spec,
+  return { root, write, invoke, calls, start, attest, trace, spec, syncFeatures,
     beforeCleanup: (cleanup) => beforeCleanup.push(cleanup) };
 }
 
@@ -265,8 +277,9 @@ test('CLI installs adapters/runtime and backs up different existing files', (t) 
   assert.ok(fs.existsSync(path.join(p.root, '.agents/runtime/crew.js')));
   assert.ok(fs.existsSync(path.join(p.root, '.github/agents/fluttercrew.agent.md')));
   assert.equal(fs.existsSync(path.join(p.root, '.github/workflows/ci.yml')), false);
-  const backup = fs.readdirSync(p.root).find((file) => /^AGENTS\.md\.fluttercrew-.*\.bak$/.test(file));
-  assert.ok(backup);
+  const manifest = JSON.parse(fs.readFileSync(path.join(p.root, '.fluttercrew-installer/manifest.json'), 'utf8'));
+  const backup = manifest.files['AGENTS.md'].backup.path;
+  assert.equal(backup, '.fluttercrew-installer/backups/AGENTS.md');
   assert.equal(fs.readFileSync(path.join(p.root, backup), 'utf8'), 'User custom instructions');
   assert.ok(fs.readFileSync(path.join(p.root, '.gitignore'), 'utf8').includes('.fluttercrew/'));
   const start = spawnSync(process.execPath, [cli, 'start', 'requirements.md', 'none'], { cwd: p.root, encoding: 'utf8' });
@@ -317,13 +330,20 @@ test('SDD: malformed, empty, duplicate and untraceable specs are rejected', () =
   for (const spec of [null, {}, { schemaVersion: 1, requirements: [] }]) {
     assert.throws(() => validateSpec(spec), /Spec requires/);
   }
-  const requirement = { id: 'REQ-001', description: 'A behavior', source: 'Brief section 1',
-    acceptanceCriteria: ['Observable result'], verification: 'automated' };
+  const requirement = { id: 'REQ-001', feature: 'core', description: 'A behavior', source: 'Brief section 1',
+    acceptanceCriteria: ['Given a context When an action happens Then a result is observable'], verification: 'automated' };
   assert.throws(() => validateSpec({ schemaVersion: 1, requirements: [requirement, requirement] }), /Duplicate/);
   for (const override of [{ id: 'invalid id' }, { description: '' }, { source: '' },
-    { acceptanceCriteria: [] }, { acceptanceCriteria: [''] }, { verification: 'skipped' }]) {
+    { acceptanceCriteria: [] }, { acceptanceCriteria: [''] }, { verification: 'skipped' },
+    { feature: undefined }, { feature: 'Not A Slug' }, { feature: '../escape' },
+    { acceptanceCriteria: ['Observable result'] }, { acceptanceCriteria: ['When x Given y Then z'] }]) {
     assert.throws(() => validateSpec({ schemaVersion: 1, requirements: [{ ...requirement, ...override }] }));
   }
+  assert.ok(validateSpec({ schemaVersion: 1, requirements: [requirement] }));
+  const legacy = { id: 'REQ-001', description: 'A behavior', source: 'Brief section 1',
+    acceptanceCriteria: ['Observable result'], verification: 'automated' };
+  assert.throws(() => validateSpec({ schemaVersion: 1, requirements: [legacy] }), /feature slug/);
+  assert.ok(validateSpec({ schemaVersion: 1, requirements: [legacy] }, { legacy: true }));
 });
 
 test('SDD: green tests and all global reports cannot hide an omitted requirement', (t) => {
@@ -883,4 +903,108 @@ test('live watcher stays alive after done and renders subsequent invalidation', 
   p.write('lib/main.dart', 'void main() { /* post-DONE edit */ }');
   await waitFor((text) => text.includes('blocked'));
   assert.match(fs.readFileSync(path.join(p.root, '.fluttercrew/dashboard.html'), 'utf8'), /status: blocked/);
+});
+
+const featureDoc = (p, slug = 'core') => path.join(p.root, `docs/features/${slug}/FEATURE.md`);
+const catalogJson = (p) => JSON.parse(fs.readFileSync(path.join(p.root, 'docs/features/catalog.json'), 'utf8'));
+
+test('feature catalog: finish requires a current sync and a reviewed, non-draft feature page', (t) => {
+  const p = project(t);
+  p.start();
+  p.invoke(['verify']);
+  p.attest();
+  fs.rmSync(path.join(p.root, 'docs/features'), { recursive: true, force: true });
+  assert.throws(() => p.invoke(['finish']), /Feature catalog out of date/);
+  assert.ok(p.invoke(['status']).nextActions.some((action) => action.kind === 'feature'));
+
+  p.invoke(['feature', 'sync']);
+  const draft = fs.readFileSync(featureDoc(p), 'utf8');
+  assert.match(draft, /FLUTTERCREW-DRAFT/);
+  assert.match(draft, /## Purpose/);
+  assert.match(draft, /\| REQ-001 \| Implement the requested feature\. \| automated \| passed \|/);
+  assert.match(draft, /- Given a user When they use the feature Then the requested behavior works\./);
+  assert.match(draft, /Implementation: `lib\/main\.dart`/);
+  assert.throws(() => p.invoke(['finish']), /FEATURE\.md is a draft/);
+
+  fs.writeFileSync(featureDoc(p), draft.replace(/^<!-- FLUTTERCREW-DRAFT.*\n/m, ''));
+  assert.throws(() => p.invoke(['finish']), /is a draft/, 'remaining _TODO_ placeholders still block');
+  p.syncFeatures();
+  assert.equal(p.invoke(['finish']).status, 'done');
+
+  const index = fs.readFileSync(path.join(p.root, 'docs/features/README.md'), 'utf8');
+  assert.match(index, /\| \[core\]\(core\/FEATURE\.md\) \| Core \| 1 \| 1 \|/);
+  const entry = catalogJson(p).features.core.requirements['REQ-001'];
+  assert.equal(entry.status, 'passed');
+  assert.deepEqual(entry.tests, ['test/feature_test.dart']);
+  assert.equal(p.invoke(['feature', 'sync']).written.length, 0, 'sync is idempotent');
+});
+
+test('feature catalog: hand-written narrative survives sync; behavior changes request re-review', (t) => {
+  const p = project(t);
+  p.start();
+  p.trace();
+  const reviewed = fs.readFileSync(featureDoc(p), 'utf8').replace('# Core', '# Core journeys');
+  fs.writeFileSync(featureDoc(p), reviewed);
+  p.write('lib/main.dart', 'void main() { /* changed */ }');
+  p.trace();
+  assert.match(fs.readFileSync(featureDoc(p), 'utf8'), /# Core journeys/);
+  assert.doesNotMatch(fs.readFileSync(featureDoc(p), 'utf8'), /FLUTTERCREW-DRAFT/, 'file-only changes need no re-review');
+  assert.match(fs.readFileSync(path.join(p.root, 'docs/features/README.md'), 'utf8'), /Core journeys/);
+
+  p.spec.requirements[0].acceptanceCriteria.push('Given an offline device When the user retries Then an offline message is shown.');
+  p.write('spec.json', JSON.stringify(p.spec));
+  p.write('change.md', 'Added offline criterion after review.');
+  p.invoke(['spec', 'spec.json', 'change.md']);
+  p.invoke(['feature', 'sync']);
+  const doc = fs.readFileSync(featureDoc(p), 'utf8');
+  assert.match(doc, /FLUTTERCREW-DRAFT: requirements REQ-001 changed/);
+  assert.match(doc, /# Core journeys/);
+  assert.match(doc, /offline message is shown/);
+});
+
+test('feature catalog accumulates across runs and rejects an ID reused by another feature', (t) => {
+  const p = project(t);
+  p.start();
+  p.invoke(['verify']);
+  p.attest();
+  assert.equal(p.invoke(['finish']).status, 'done');
+  p.invoke(['archive', 'core']);
+
+  p.write('next.md', 'Add a profile screen.');
+  p.invoke(['start', 'next.md', 'none']);
+  const next = { schemaVersion: 1, requirements: [{ ...p.spec.requirements[0], feature: 'profile', source: 'next.md' }] };
+  p.write('next-spec.json', JSON.stringify(next));
+  assert.throws(() => p.invoke(['spec', 'next-spec.json']), /REQ-001 already belongs to feature "core"/);
+  next.requirements[0].id = 'PROFILE-001';
+  p.write('next-spec.json', JSON.stringify(next));
+  p.invoke(['spec', 'next-spec.json']);
+  p.invoke(['feature', 'sync']);
+  const catalog = catalogJson(p);
+  assert.deepEqual(Object.keys(catalog.features), ['core', 'profile']);
+  assert.equal(catalog.features.core.requirements['REQ-001'].status, 'passed');
+  assert.equal(catalog.features.profile.requirements['PROFILE-001'].status, 'pending');
+  const index = fs.readFileSync(path.join(p.root, 'docs/features/README.md'), 'utf8');
+  assert.match(index, /\[core\]/);
+  assert.match(index, /\[profile\]/);
+});
+
+test('feature catalog: legacy baselines without feature slugs are not gated', (t) => {
+  const p = project(t);
+  p.invoke(['start', 'requirements.md', 'none']);
+  const legacy = { schemaVersion: 1, requirements: [{ id: 'REQ-001', description: 'Legacy', source: 'requirements.md',
+    acceptanceCriteria: ['Free-form criterion'], verification: 'automated' }] };
+  p.write('spec.json', JSON.stringify(legacy));
+  assert.throws(() => p.invoke(['spec', 'spec.json']), /feature slug/);
+  p.write('spec.json', JSON.stringify(p.spec));
+  p.invoke(['spec', 'spec.json']);
+  // Simulate a run baselined before feature/Given-When-Then rules existed.
+  p.write('spec.json', JSON.stringify(legacy));
+  const state = path.join(p.root, '.fluttercrew/run.json');
+  const manifest = JSON.parse(fs.readFileSync(state, 'utf8'));
+  manifest.spec.hash = require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(p.root, 'spec.json'))).digest('hex');
+  p.write('.fluttercrew/run.json', JSON.stringify(manifest));
+  const report = p.invoke(['status']);
+  assert.deepEqual(report.specIssues, []);
+  assert.deepEqual(report.featureIssues, []);
+  assert.throws(() => p.invoke(['feature', 'sync']), /No requirement in the current spec declares a feature/);
 });

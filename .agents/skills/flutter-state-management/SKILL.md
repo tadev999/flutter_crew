@@ -30,7 +30,7 @@ class ProductLoading extends ProductState {
 
 class ProductSuccess extends ProductState {
   const ProductSuccess(this.products);
-  final List<ProductEntity> products;
+  final List<ProductModel> products;
 }
 
 class ProductFailure extends ProductState {

@@ -4,13 +4,20 @@ const { MODES, MODE_LIMITS, DEFAULT_MODE } = require('./constants');
 
 const text = (value) => typeof value === 'string' && value.trim().length > 0;
 
+const FEATURE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const GIVEN_WHEN_THEN = /^\s*given\s+\S[\s\S]*?\bwhen\s+\S[\s\S]*?\bthen\s+\S/i;
+
 function strings(value, label, allowEmpty = false) {
   if (!Array.isArray(value) || (!allowEmpty && !value.length) || !value.every(text)) {
     throw new Error(`${label} must be ${allowEmpty ? 'an' : 'a non-empty'} array of non-empty strings.`);
   }
 }
 
-function validateSpec(value) {
+/**
+ * Validate a spec. New baselines are strict (feature slug + Given/When/Then);
+ * `legacy` keeps specs baselined before those rules readable for existing runs.
+ */
+function validateSpec(value, { legacy = false } = {}) {
   if (!value || value.schemaVersion !== 1 || !Array.isArray(value.requirements) ||
       !value.requirements.length) {
     throw new Error('Spec requires schemaVersion: 1 and a non-empty requirements array.');
@@ -38,6 +45,18 @@ function validateSpec(value) {
     if (!['automated', 'manual'].includes(requirement.verification)) {
       throw new Error(`${requirement.id}.verification must be automated or manual.`);
     }
+    if (requirement.feature !== undefined && !FEATURE_SLUG.test(requirement.feature)) {
+      throw new Error(`${requirement.id}.feature must be a kebab-case slug such as "auth" or "task-board".`);
+    }
+    if (legacy) continue;
+    if (requirement.feature === undefined) {
+      throw new Error(`${requirement.id} requires a feature slug (e.g. "auth") for the feature catalog.`);
+    }
+    requirement.acceptanceCriteria.forEach((criterion, index) => {
+      if (!GIVEN_WHEN_THEN.test(criterion)) {
+        throw new Error(`${requirement.id}.acceptanceCriteria[${index}] must use "Given <context> When <action> Then <outcome>".`);
+      }
+    });
   }
   return value;
 }
@@ -59,4 +78,4 @@ function validateTrace(value, requirement) {
   return value;
 }
 
-module.exports = { validateSpec, validateTrace };
+module.exports = { validateSpec, validateTrace, FEATURE_SLUG };

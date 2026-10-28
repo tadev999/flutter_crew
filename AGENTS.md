@@ -30,8 +30,12 @@ When installed in a target Flutter application, do not modify, delete or refacto
 `.agents/**`, `.fluttercrew/**`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`,
 `.cursorrules`, `.vscode/**`, `.github/agents/**`, `.github/prompts/**` or
 `.github/copilot-instructions.md`. Installer ownership/recovery files
-`.fluttercrew-install.json` and `*.fluttercrew-*.bak` must also be preserved;
+`.fluttercrew-installer/**`, legacy `.fluttercrew-install.json` and
+`*.fluttercrew-*.bak` must also be preserved;
 manage installation changes through the installer CLI, not manual edits.
+Installs and updates overwrite every FlutterCrew file, so put team-specific rules
+and skills in `.agents/local/**` instead: it is team-owned, never touched by the
+installer, and must be read and followed when present unless it weakens safety.
 
 This protection does NOT apply when maintaining the FlutterCrew source repository
 itself: runtime code, workflows, instructions and tests may be changed as requested.
@@ -55,6 +59,9 @@ reviewed stable requirements → actual developer approval bound to the baseline
 BEFORE application source edits → implementation → immediate tests → current
 per-ID traces → `verify` → reviewed evidence registered with `accept` → `finish`.
 No DONE with omitted/pending/blocked/stale requirements, tasks or evidence.
+Acceptance criteria use Given/When/Then; each requirement names a `feature`.
+Before `finish`, `feature sync` updates the committed living catalog in
+`docs/features/`; review each touched FEATURE.md and remove its draft marker.
 Scope changes require reviewed impact, rebaseline, renewed approval and invalidated
 evidence re-verification. Never reduce scope or falsify evidence to pass gates.
 
@@ -68,10 +75,11 @@ compliance, production readiness, deployment or semantic requirement coverage.
 
 ## Flutter engineering defaults
 
-- Feature-first MVVM: `models/` for entities/DTOs; `services/` for backend/storage;
-  `viewmodels/` for state/business logic without UI imports; `views/` for widgets.
+- Feature-first BLoC: `models/` for entities/DTOs; `services/` for backend/storage;
+  `bloc/` for Bloc/Cubit state and business logic without UI imports; `views/` for widgets.
+  BLoC is the default; if the project already uses other state management, follow it.
   Keep API calls and business rules out of Views. Use constructor injection and
-  the project's existing state management/DI; do not introduce gratuitous layers.
+  the project's existing DI; do not introduce gratuitous layers.
 - Dart 3, immutable state, `final`, `copyWith`, exhaustive state handling, safe
   null handling and `const` where possible. Run `dart format` and analyzer.
   Decompose large widgets and narrow subscriptions; `const` is not rebuild immunity.
@@ -85,8 +93,10 @@ compliance, production readiness, deployment or semantic requirement coverage.
   Use relevant indexes and validated auth redirects. Auth-only scope still needs
   real authentication tests. Cancel subscriptions and dispose controllers in both
   backends.
-- Implementation-first, immediately test-verified. For a bug regression use
-  RED-GREEN-REFACTOR to demonstrate the failure before the fix. Use existing
+- Implementation-first for features and bug fixes: edit production code before
+  writing or updating tests, then immediately execute the relevant tests.
+  Bug fixes require regression coverage after the fix; no test-first exception.
+  Existing tests may be run unchanged during diagnosis. Use existing
   `flutter_test`/`test`; `bloc_test` only for BLoC/Cubit and `mocktail` only when
   mocks help. Neither dependency is mandatory for non-bloc or trivial tests.
   Cover business/state/security failures automatically; aim for 80%+ core logic

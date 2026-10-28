@@ -41,8 +41,8 @@ function reportFor(scene) {
     id: `REQ-00${index + 1}`, description,
     status: stale ? 'stale' : (scene.completed >= (index + 1) * 2 ? 'passed' : 'pending'),
     recordedStatus: stale ? 'passed' : undefined,
-    source: 'Demo brief', verification: 'automated',
-    acceptanceCriteria: ['Success, error and authorization behavior are covered.'],
+    source: 'Demo brief', verification: 'automated', feature: 'demo',
+    acceptanceCriteria: ['Given a signed-in user When the action succeeds, fails or is unauthorized Then the matching state is shown.'],
     references: [], notes: 'Illustrative data only; no commands or backend tests were executed.'
   }));
   const tasks = requirements.flatMap(({ id }, index) =>

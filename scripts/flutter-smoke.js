@@ -50,9 +50,10 @@ try {
     schemaVersion: 1,
     requirements: [{
       id: 'REQ-001',
+      feature: 'counter',
       description: 'The generated counter increments when its add button is tapped.',
       source: 'docs/fluttercrew/request.md:1',
-      acceptanceCriteria: ['The generated widget test passes through the installed real Flutter gates.'],
+      acceptanceCriteria: ['Given the generated counter at 0 When the add button is tapped Then the counter shows 1.'],
       verification: 'automated'
     }]
   });

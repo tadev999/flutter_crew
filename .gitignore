@@ -1,4 +1,6 @@
 .fluttercrew/
+.fluttercrew-installer/
+.fluttercrew-install.json
 *.fluttercrew-*.bak
 
 # Dependencies

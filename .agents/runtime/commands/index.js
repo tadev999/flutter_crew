@@ -6,6 +6,7 @@ const { verify, finish } = require('./verification');
 const { status, next, dashboard, watch } = require('./views');
 const { task } = require('./tasks');
 const { profile, doctor } = require('./project');
+const { feature } = require('./features');
 
 /**
  * Command registry: one entry per CLI command. `usage` feeds the help text and
@@ -23,6 +24,7 @@ const COMMANDS = Object.freeze({
   task: { usage: 'task <REQ-ID> <implementation|testing> <pending|in_progress|done|blocked> <notes> | task --all <phase> <status> <notes>', run: task },
   verify: { usage: 'verify', run: verify },
   accept: { usage: 'accept <criterion> <evidence-file> | accept --draft <criterion>', run: accept },
+  feature: { usage: 'feature sync', run: feature },
   finish: { usage: 'finish', run: finish },
   profile: { usage: 'profile [--json]', run: profile },
   doctor: { usage: 'doctor [--json]', run: doctor },
