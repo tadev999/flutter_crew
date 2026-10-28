@@ -47,20 +47,6 @@ Raw AI assistants generate code inside a black box—deciding architecture unila
 [8. Feature catalog] 📚 docs/features/<feature>/FEATURE.md updated for devs & agents
 ```
 
-### Feature catalog
-
-Each requirement belongs to a `feature` and uses Given/When/Then acceptance criteria.
-Before `finish`, run `node .agents/runtime/crew.js feature sync` to update the
-committed, living documentation in `docs/features/`:
-
-- `README.md`: index of every feature with requirement counts and last update.
-- `<feature>/FEATURE.md`: reviewed narrative (purpose, behavior, UI states,
-  technical overview, decisions, limitations) plus a generated requirements block
-  with acceptance criteria and linked code/tests.
-- `catalog.json`: machine-readable requirements accumulated across runs.
-
-`finish` is blocked while the catalog is out of date or a touched page is still a draft.
-
 ---
 
 ## Dashboard
@@ -107,45 +93,7 @@ Uninstall from the Flutter project:
 npx flutter-crew uninstall
 ```
 
-Preview changes before installing:
 
-```bash
-npx flutter-crew install --dry-run
-```
-
-Installation records which files it owns in `.fluttercrew-installer/manifest.json`.
-Original files are stored under `.fluttercrew-installer/backups/`, retaining their
-relative paths rather than scattering `.bak` files among agents and runtime code.
-The installer directory is gitignored and separate from delivery evidence.
-Every
-install or update makes FlutterCrew files match the package exactly:
-
-- FlutterCrew files (`.agents/**`, shipped `.github/agents` and `.github/prompts`
-  files, `.github/copilot-instructions.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`,
-  `.cursorrules`, `.vscode/*.json`) are overwritten, including local edits.
-  Files shipped by an earlier version but no longer included are deleted.
-- A team file that already existed at one of those paths before the first install
-  is backed up once in `.fluttercrew-installer/backups/` and restored on uninstall.
-- Never touched: `docs/features/`, `docs/fluttercrew/`, `.fluttercrew/`,
-  `.agents/local/`, your own agents/prompts/workflows and application code.
-- `.gitignore` only receives the missing privacy lines; your edits are kept.
-
-Put team-specific rules and skills in `.agents/local/`; agents read them and
-updates never overwrite them.
-
-On install/update or uninstall, legacy `.fluttercrew-install.json` manifests and
-their recorded `*.fluttercrew-*.bak` files are migrated automatically. Migration
-checks every backup hash before changing recovery files, preserves original modes,
-and removes old copies only after saving the new manifest. Dry runs preview the
-migration without writing. Missing/modified backups or conflicting manifests stop
-migration for manual review; unrelated backups are never swept or deleted.
-
-Uninstall removes every FlutterCrew file (including locally edited ones) and
-restores the backed-up originals. The preserved paths above stay in place. If a
-backup is missing or was edited, that file is left for manual review. For older
-installations without an ownership record, uninstall refuses destructive cleanup
-rather than guessing which files belong to FlutterCrew. Privacy ignore rules stay
-while `.fluttercrew/` evidence remains; always read the retained-path notices.
 
 Inspect available commands and diagnose your environment:
 

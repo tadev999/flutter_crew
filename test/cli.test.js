@@ -68,6 +68,46 @@ function legacyInstallation(p) {
   return manifest;
 }
 
+test('explicit conflict recovery archives legacy history without changing current ownership', (t) => {
+  const p = fixture(t);
+  p.write('AGENTS.md', 'legacy original');
+  success(p.run('install'));
+  const legacy = legacyInstallation(p);
+  const legacySnapshot = p.read('.fluttercrew-install.json');
+  const backups = Object.values(legacy.files).filter((entry) => entry.backup)
+    .map((entry) => ({ path: entry.backup.path, contents: p.read(entry.backup.path) }));
+  fs.renameSync(path.join(p.root, '.fluttercrew-install.json'), path.join(p.root, 'saved-manifest'));
+  p.write('AGENTS.md', 'current original');
+  success(p.run('install'));
+  fs.renameSync(path.join(p.root, 'saved-manifest'), path.join(p.root, '.fluttercrew-install.json'));
+  const current = p.read(manifestName);
+  const before = snapshot(p.root);
+  assert.equal(p.run('install').status, 1);
+  success(p.run('recover-install', '--dry-run'));
+  assert.deepEqual(snapshot(p.root), before);
+  const backup = backups[0];
+  p.write(backup.path, 'corrupted');
+  const damaged = snapshot(p.root);
+  assert.equal(p.run('recover-install').status, 1);
+  assert.deepEqual(snapshot(p.root), damaged);
+  p.write(backup.path, backup.contents);
+  success(p.run('recover-install'));
+  assert.equal(p.read(manifestName), current);
+  assert.equal(p.exists('.fluttercrew-install.json'), false);
+  const archives = fs.readdirSync(path.join(p.root, '.fluttercrew-installer/archives'));
+  assert.equal(archives.length, 1);
+  const prefix = `.fluttercrew-installer/archives/${archives[0]}`;
+  assert.equal(p.read(`${prefix}/.fluttercrew-install.json`), legacySnapshot);
+  for (const entry of backups) {
+    assert.equal(p.read(`${prefix}/${entry.path}`), entry.contents);
+    assert.equal(p.exists(entry.path), false);
+  }
+  success(p.run('install'));
+  success(p.run('uninstall'));
+  assert.equal(p.read('AGENTS.md'), 'current original');
+  assert.equal(p.read(`${prefix}/.fluttercrew-install.json`), legacySnapshot);
+});
+
 test('legacy migration centralizes originals, preserves modes and is idempotent', (t) => {
   const p = fixture(t);
   p.write('AGENTS.md', 'original instructions');

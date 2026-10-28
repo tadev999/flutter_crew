@@ -25,6 +25,8 @@ Usage:
   flutter-crew uninstall [directory] [--dry-run]   Alias: remove
   flutter-crew init                    Interactive scaffold; aliases: create, new
   flutter-crew doctor [directory]      Read-only local/tool diagnostics
+  flutter-crew recover-install [directory] [--dry-run]
+                                      Keep current ownership; archive legacy manifest/backups
   flutter-crew --help                  Show this help (no writes)
   flutter-crew --version               Show package version (no writes)
 
@@ -210,9 +212,10 @@ async function main(argv = process.argv.slice(2)) {
     if (dryRun || args.length) throw new Error('init takes no arguments and requires an interactive terminal.');
     return runInteractiveInit();
   }
-  if (['install', 'uninstall', 'remove', 'doctor'].includes(name)) {
+  if (['install', 'uninstall', 'remove', 'doctor', 'recover-install'].includes(name)) {
     if (args.length > 1 || (name === 'doctor' && dryRun)) throw new Error(`Invalid ${name} arguments. Use flutter-crew --help.`);
     if (name === 'doctor') return doctor(args[0]);
+    if (name === 'recover-install') return require('./installer').archiveLegacy(args[0] || '.', { dryRun });
     return (name === 'install' ? installAgentsTo : uninstallAgentsFrom)(args[0] || '.', { dryRun });
   }
   if (positional.length > 1) throw new Error('Expected one target directory. Use flutter-crew --help.');

@@ -53,13 +53,13 @@ function regular(root, relative) {
   return info;
 }
 
-function readManifest(root) {
+function readManifest(root, selection) {
   for (const relative of [INSTALLER_DIR, `${INSTALLER_DIR}/backups`]) {
     const info = stat(safePath(root, relative));
     if (info && !info.isDirectory()) throw new Error(`Expected directory: ${relative}`);
   }
-  const current = regular(root, MANIFEST);
-  const legacy = regular(root, LEGACY_MANIFEST);
+  const current = selection === 'legacy' ? null : regular(root, MANIFEST);
+  const legacy = selection === 'current' ? null : regular(root, LEGACY_MANIFEST);
   if (current && legacy) throw new Error('Both installer manifests exist; preserve recovery files and resolve the conflict manually.');
   if (!current && !legacy) return { version: 2, files: {}, directories: [] };
   const value = JSON.parse(fs.readFileSync(path.join(root, current ? MANIFEST : LEGACY_MANIFEST), 'utf8'));
@@ -402,4 +402,39 @@ function uninstall(source, target, { dryRun = false } = {}) {
   pruneRecoveryDirectories(root);
 }
 
-module.exports = { install, uninstall, safePath };
+function archiveLegacy(target, { dryRun = false } = {}) {
+  const root = canonicalRoot(target);
+  if (!regular(root, MANIFEST) || !regular(root, LEGACY_MANIFEST)) {
+    throw new Error('Recovery requires both installer manifests. Nothing was changed.');
+  }
+  const current = readManifest(root, 'current');
+  const legacy = readManifest(root, 'legacy');
+  for (const manifest of [current, legacy]) {
+    for (const entry of Object.values(manifest.files)) {
+      if (entry.backup && (!regular(root, entry.backup.path) ||
+          hash(fs.readFileSync(path.join(root, entry.backup.path))) !== entry.backup.hash)) {
+        throw new Error(`Cannot archive: backup missing or modified (${entry.backup.path}). Nothing was changed.`);
+      }
+    }
+  }
+  if (!regular(root, '.gitignore') ||
+      !fs.readFileSync(path.join(root, '.gitignore'), 'utf8').split(/\r?\n/).includes(`${INSTALLER_DIR}/`)) {
+    throw new Error(`Add ${INSTALLER_DIR}/ to .gitignore before archiving recovery files.`);
+  }
+  const archive = `${INSTALLER_DIR}/archives/legacy-${crypto.randomUUID()}`;
+  console.log(`${dryRun ? 'Would archive' : 'Archiving'} legacy manifest and backups to ${archive}/; current ownership stays unchanged.`);
+  if (dryRun) return;
+  for (const entry of Object.values(legacy.files)) {
+    if (!entry.backup) continue;
+    const destination = safePath(root, `${archive}/${entry.backup.path}`);
+    fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 });
+    fs.copyFileSync(path.join(root, entry.backup.path), destination, fs.constants.COPYFILE_EXCL);
+  }
+  fs.mkdirSync(safePath(root, archive), { recursive: true, mode: 0o700 });
+  fs.renameSync(path.join(root, LEGACY_MANIFEST), path.join(root, archive, LEGACY_MANIFEST));
+  for (const entry of Object.values(legacy.files)) {
+    if (entry.backup) fs.unlinkSync(path.join(root, entry.backup.path));
+  }
+}
+
+module.exports = { install, uninstall, safePath, archiveLegacy };
